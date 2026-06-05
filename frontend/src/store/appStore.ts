@@ -106,8 +106,8 @@ interface AppState {
   // Multimeter
   meterMode: 'V' | 'A' | 'Ω' | 'CONT';
 
-  // Theme
-  darkMode: boolean;
+  // Navigation — which panel is expanded (null = dashboard)
+  activePanel: null | 'osc' | 'proto' | 'funcgen' | 'code';
 
   // Code context
   repoUrl: string;
@@ -186,7 +186,7 @@ export const useAppStore = create<AppState>((setState) => ({
   funcW2: false,
 
   meterMode: 'V',
-  darkMode: true,
+  activePanel: null,
 
   repoUrl: '',
   repoOwner: '',

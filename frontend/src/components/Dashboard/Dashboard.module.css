@@ -1,0 +1,248 @@
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 16px;
+  padding: 20px;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+/* ─── Card ─────────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  position: relative;
+  min-height: 0;
+}
+.card:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-light);
+  box-shadow: var(--shadow-card), 0 0 0 1px var(--accent-light);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 8px;
+  flex-shrink: 0;
+}
+.cardLabel {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.liveDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: livePulse 2.4s ease-in-out infinite;
+}
+@keyframes livePulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(217,119,6,0.35); }
+  50%       { opacity: 0.6; box-shadow: 0 0 0 5px rgba(217,119,6,0); }
+}
+
+.cardBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 14px 12px;
+  gap: 8px;
+}
+
+/* ─── Card 1: Oscilloscope ──────────────────────────────────────────────────── */
+.scopeArea {
+  background: var(--bg-scope);
+  border-radius: 4px;
+  height: 80px;
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+}
+.scopeCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.scopeStats {
+  display: flex;
+  gap: 16px;
+}
+.channelStat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.chTag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.ch1Tag { background: rgba(8,145,178,0.12); color: var(--ch1); }
+.ch2Tag { background: rgba(217,119,6,0.12); color: var(--ch2); }
+.chVal { font-family: var(--font-mono); font-size: 11px; color: var(--text-primary); }
+.chSub { font-family: var(--font-mono); font-size: 10px; color: var(--text-tertiary); }
+
+/* ─── Card 2: Protocol ──────────────────────────────────────────────────────── */
+.protoList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.protoRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.protoRow:last-child { border-bottom: none; }
+.protoBadge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.i2cBadge { background: var(--i2c-bg); color: var(--i2c); }
+.spiBadge  { background: var(--spi-bg); color: var(--spi); }
+.uartBadge { background: var(--uart-bg); color: var(--uart); }
+.protoDecoded {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.protoEmpty {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  padding: 8px 0;
+  font-family: var(--font-mono);
+}
+
+/* ─── Card 3: Function Generator ────────────────────────────────────────────── */
+.funcRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.funcWaveIcon {
+  font-size: 20px;
+  color: var(--text-secondary);
+  line-height: 1;
+}
+.funcMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.funcFreq {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1;
+}
+.funcAmp {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.outputPills {
+  display: flex;
+  gap: 5px;
+  margin-top: 4px;
+}
+.outputPill {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+}
+.pillOn  { background: var(--accent); color: #fff; }
+.pillOff { background: var(--bg-tertiary); color: var(--text-tertiary); }
+
+/* ─── Card 4: Code Context ──────────────────────────────────────────────────── */
+.codeEmpty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+}
+.codeEmptyIcon { font-size: 20px; }
+.codeEmptyText {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-align: center;
+  font-family: var(--font-sans);
+}
+.repoName {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.repoMeta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+.fileTree {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-secondary);
+}
+.fileIcon { color: var(--text-tertiary); font-size: 9px; }
+
+/* ─── Expand hint ───────────────────────────────────────────────────────────── */
+.expandHint {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-sans);
+  margin-top: auto;
+  padding-top: 6px;
+}

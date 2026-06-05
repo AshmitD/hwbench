@@ -1,16 +1,17 @@
 import { useEffect, useRef } from 'react';
 import { Packet } from '../../store/appStore';
-import styles from './HardwarePanel.module.css';
+import styles from './InstrumentControls.module.css';
 
 interface Props {
   packets: Packet[];
   paused: boolean;
 }
 
-const PROTO_COLORS: Record<string, string> = {
-  I2C: 'var(--i2c)',
-  SPI: 'var(--spi)',
-  UART: 'var(--uart)',
+const PROTO_BG: Record<string, string> = {
+  I2C: 'var(--i2c-bg)', SPI: 'var(--spi-bg)', UART: 'var(--uart-bg)',
+};
+const PROTO_TEXT: Record<string, string> = {
+  I2C: 'var(--i2c)', SPI: 'var(--spi)', UART: 'var(--uart)',
 };
 
 function formatPacket(pkt: Packet): { label: string; detail: string } {
@@ -33,19 +34,13 @@ export default function ProtocolTraffic({ packets, paused }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const autoscrollRef = useRef(true);
-
-  // Track displayed packet count — frozen at pause time
   const frozenCountRef = useRef(packets.length);
   const prevPausedRef = useRef(false);
 
-  // Capture freeze point when pause engages
   useEffect(() => {
     const wasRunning = !prevPausedRef.current;
-    if (paused && wasRunning) {
-      frozenCountRef.current = packets.length;
-    }
+    if (paused && wasRunning) frozenCountRef.current = packets.length;
     if (!paused && prevPausedRef.current) {
-      // Just unpaused: jump to latest
       frozenCountRef.current = packets.length;
       autoscrollRef.current = true;
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 30);
@@ -53,7 +48,6 @@ export default function ProtocolTraffic({ packets, paused }: Props) {
     prevPausedRef.current = paused;
   }, [paused, packets.length]);
 
-  // Auto-scroll when running
   useEffect(() => {
     if (!paused && autoscrollRef.current && bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: 'instant' });
@@ -61,7 +55,7 @@ export default function ProtocolTraffic({ packets, paused }: Props) {
   }, [packets, paused]);
 
   const handleScroll = () => {
-    if (paused) return; // user is browsing history — don't hijack
+    if (paused) return;
     const el = containerRef.current;
     if (!el) return;
     autoscrollRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
@@ -73,25 +67,21 @@ export default function ProtocolTraffic({ packets, paused }: Props) {
   return (
     <div className={styles.protocolTrafficWrapper}>
       {paused && buffered > 0 && (
-        <div className={styles.pausedBanner}>
-          PAUSED — {buffered} packet{buffered !== 1 ? 's' : ''} buffered
-        </div>
+        <div className={styles.pausedBanner}>PAUSED — {buffered} packet{buffered !== 1 ? 's' : ''} buffered</div>
       )}
-      <div
-        ref={containerRef}
-        className={styles.protocolScroll}
-        onScroll={handleScroll}
-      >
+      <div ref={containerRef} className={styles.protocolScroll} onScroll={handleScroll}>
         {displayPackets.length === 0 ? (
           <div className={styles.protocolEmpty}>Waiting for protocol traffic…</div>
         ) : (
           displayPackets.map((pkt) => {
-            const color = PROTO_COLORS[pkt.protocol] || 'var(--text-muted)';
             const { label, detail } = formatPacket(pkt);
             return (
               <div key={pkt.id} className={styles.packetRow}>
                 <span className={styles.packetTs}>{pkt.timestamp}</span>
-                <span className={styles.packetProto} style={{ color }}>
+                <span
+                  className={styles.packetProto}
+                  style={{ background: PROTO_BG[pkt.protocol], color: PROTO_TEXT[pkt.protocol] }}
+                >
                   {pkt.protocol}
                 </span>
                 <span className={styles.packetLabel}>{label}</span>

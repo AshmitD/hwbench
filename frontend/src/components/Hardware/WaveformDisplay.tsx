@@ -1,29 +1,28 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { ChannelData, useAppStore } from '../../store/appStore';
+import { ChannelData } from '../../store/appStore';
 import { computeFFT, fmtFreqLabel } from '../../utils/fft';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const GRID_COLS = 10;
 const GRID_ROWS = 8;
 const SUBDIVISIONS = 5;
-// Read at draw time so light/dark theme is respected
+// Warm dark scope — always the same regardless of UI theme
 function scopeColors() {
-  const isDark = !document.documentElement.classList.contains('light');
   return {
-    bg: isDark ? '#030a04' : '#f0f8f0',
-    gridMinor: isDark ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.055)',
-    gridMajor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.10)',
-    crosshair: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.18)',
-    tick: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.25)',
-    label: isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.45)',
-    frozen: isDark ? 'rgba(245,158,11,0.6)' : 'rgba(180,100,0,0.7)',
-    minimapBg: isDark ? '#020604' : '#f0f5f0',
+    bg: '#1a1814',
+    gridMinor: 'rgba(255,255,255,0.03)',
+    gridMajor: 'rgba(255,255,255,0.07)',
+    crosshair: 'rgba(255,255,255,0.10)',
+    tick: 'rgba(255,255,255,0.14)',
+    label: 'rgba(255,255,255,0.42)',
+    frozen: 'rgba(217,119,6,0.8)',
+    minimapBg: '#1a1814',
   };
 }
-const CH1_COLOR = '#22d3ee';
-const CH2_COLOR = '#f59e0b';
-const MATH_COLOR = '#a855f7';
-const TRIG_COLOR = '#f97316';
+const CH1_COLOR = '#0891b2';  // --ch1
+const CH2_COLOR = '#d97706';  // --ch2
+const MATH_COLOR = '#7c3aed';
+const TRIG_COLOR = '#d97706'; // amber trigger line
 const CURSOR_A_COLOR = '#86efac';
 const CURSOR_B_COLOR = '#fca5a5';
 const SAMPLE_RATE_HZ = 200_000; // 1000 samples / 5ms
@@ -400,7 +399,6 @@ export default function WaveformDisplay({
   const minimapRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const dprRef = useRef(window.devicePixelRatio || 1);
-  const darkMode = useAppStore(s => s.darkMode); // triggers re-draw on theme switch
 
   // Frozen frame for pause
   const frozenCh1 = useRef<number[]>([]);
@@ -586,7 +584,7 @@ export default function WaveformDisplay({
     persistMode, fftMode, showCursors, showMath, mathOperation,
     ch1Enabled, ch2Enabled, ch1Coupling, ch2Coupling, ch1Probe, ch2Probe,
     ch1Invert, ch2Invert, ch1VoltPerDiv, ch2VoltPerDiv,
-    triggerLevel, triggerSource, acqMode, acqAvgN, ch2Override, darkMode,
+    triggerLevel, triggerSource, acqMode, acqAvgN, ch2Override,
   ]);
 
   // Update frozen refs + persistence + avg buffer

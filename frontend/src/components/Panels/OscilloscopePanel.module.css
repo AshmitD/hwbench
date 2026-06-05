@@ -1,0 +1,123 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+/* ── Toolbar ────────────────────────────────────────────────────────────────── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.toolbarSection {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.toolbarDivider { width: 1px; height: 16px; background: var(--border); margin: 0 4px; }
+
+.featureBtn {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.featureBtn:hover { background: var(--accent-light); border-color: var(--accent-light); }
+.featureBtnOn {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-color: var(--accent) !important;
+}
+
+.runPauseBtn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.runPauseBtn.running {
+  color: var(--success);
+  border-color: rgba(22,163,74,0.3);
+  background: rgba(22,163,74,0.06);
+}
+.runPauseBtn.paused {
+  color: var(--accent);
+  border-color: rgba(217,119,6,0.3);
+  background: var(--accent-light);
+}
+
+.mockBadge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-light);
+  color: var(--accent);
+}
+
+.statsBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.ch1Tag { font-size: 9px; font-weight: 700; color: var(--ch1); }
+.ch2Tag { font-size: 9px; font-weight: 700; color: var(--ch2); }
+.statVal { color: var(--text-primary); }
+.statSub { color: var(--text-tertiary); }
+.pausedLabel { font-size: 10px; font-family: var(--font-mono); color: var(--accent); }
+
+.mathSelect {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+/* ── Waveform ───────────────────────────────────────────────────────────────── */
+.waveformArea {
+  flex: 1;
+  min-height: 0;
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  background: var(--bg-scope);
+}
+
+/* ── Sub-panels ─────────────────────────────────────────────────────────────── */
+.subPanels {
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+}

@@ -4,165 +4,101 @@
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
-  overflow: hidden;
 }
 
 .topbar {
-  height: 40px;
-  min-height: 40px;
+  height: 44px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 20px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-secondary);
-  flex-shrink: 0;
-  z-index: 10;
+  gap: 12px;
 }
+
+.backBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: color 0.12s, background 0.12s;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-family: var(--font-sans);
+}
+.backBtn:hover { color: var(--text-primary); background: var(--bg-tertiary); }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
-
-.brandDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 8px var(--accent);
-}
-
 .brandName {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.01em;
   color: var(--text-primary);
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+}
+.panelName {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-weight: 400;
 }
 
-.brandSub {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-left: 4px;
-}
-
-.topbarRight {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
+.divider { width: 1px; height: 16px; background: var(--border); flex-shrink: 0; }
 
 .status {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
   font-family: var(--font-mono);
-  color: var(--text-muted);
+  font-size: 10px;
+  color: var(--text-tertiary);
+  margin-left: auto;
 }
-
-.themeToggle {
-  font-size: 14px;
-  color: var(--text-muted);
-  padding: 2px 6px;
-  border-radius: 4px;
-  cursor: pointer;
-  background: transparent;
-  border: 1px solid var(--border);
-  transition: color 0.12s, border-color 0.12s;
-  line-height: 1;
-}
-.themeToggle:hover { color: var(--text-primary); border-color: var(--border-bright); }
-
 .statusDot {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--text-muted);
+  background: var(--text-tertiary);
 }
+.statusDot.mock { background: var(--accent); }
+.statusDot.connected { background: var(--success); }
+.statusDot.disconnected { background: var(--error); }
 
-.statusDot.mock {
-  background: var(--warning);
-  box-shadow: 0 0 6px var(--warning);
-}
-
-.statusDot.connected {
-  background: var(--success);
-  box-shadow: 0 0 6px var(--success);
-}
-
-.statusDot.disconnected {
-  background: var(--error);
-}
-
-.panels {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-  position: relative;
-}
-
-.left {
-  width: 280px;
-  min-width: 200px;
-  max-width: 480px;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--border);
-  background: var(--bg-secondary);
-  overflow: hidden;
-  position: relative;
-  flex-shrink: 0;
-}
-
-.center {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--bg-primary);
-  min-width: 0;
-}
-
-/* .right panel removed — replaced by floating DebugOverlay */
-
-.resizer {
-  width: 4px;
-  height: 100%;
-  cursor: col-resize;
-  background: transparent;
-  position: absolute;
-  right: 0;
-  top: 0;
-  z-index: 5;
-  transition: background 0.15s;
-}
-
-.resizer:hover {
-  background: var(--accent-border);
-}
-
-.panelHeader {
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.panelTitle {
-  font-size: 11px;
-  font-weight: 500;
+.mockBadge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
   letter-spacing: 0.06em;
-  color: var(--text-muted);
-  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-light);
+  color: var(--accent);
 }
 
-.panelActions {
-  display: flex;
-  gap: 4px;
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.panelView {
+  width: 100%;
+  height: 100%;
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }

@@ -11,7 +11,9 @@ function mockReading(mode: string, ch1Vrms: number): { primary: number; secondar
   return { primary: 0, secondary: null };
 }
 
-export default function MultimeterPanel() {
+interface Props { inline?: boolean; }
+
+export default function MultimeterPanel({ inline = false }: Props) {
   const [open, setOpen] = useState(false);
   const [primary, setPrimary] = useState(0);
   const [secondary, setSecondary] = useState<number | null>(null);
@@ -20,12 +22,12 @@ export default function MultimeterPanel() {
   const s = useAppStore();
   const set = s.set;
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   const ch1 = s.hardwareFrame?.oscilloscope.ch1;
-  const ch1Vrms = ch1 ? Math.sqrt(ch1.vpp ** 2 / 8) : 0; // approx Vrms for sine
+  const ch1Vrms = ch1 ? Math.sqrt(ch1.vpp ** 2 / 8) : 0;
+  const active = inline || open;
 
   useEffect(() => {
-    if (!open) return;
+    if (!active) return;
     timerRef.current = setInterval(() => {
       const r = mockReading(s.meterMode, ch1Vrms);
       setPrimary(r.primary);
@@ -33,7 +35,7 @@ export default function MultimeterPanel() {
       if (s.meterMode === 'CONT') setContPulse(r.primary < 0.1);
     }, 300);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [open, s.meterMode, ch1Vrms]);
+  }, [active, s.meterMode, ch1Vrms]);
 
   const fmtPrimary = (): string => {
     if (s.meterMode === 'V') return `${primary >= 0 ? '' : '-'}${Math.abs(primary).toFixed(4)}`;
@@ -42,8 +44,28 @@ export default function MultimeterPanel() {
     if (s.meterMode === 'CONT') return primary < 0.1 ? '●' : '○';
     return '0.0000';
   };
-
   const primaryUnit = s.meterMode === 'V' ? 'V AC' : s.meterMode === 'A' ? 'A' : s.meterMode === 'Ω' ? 'Ω' : '';
+
+  const body = (
+    <>
+      <div className={styles.meterDisplay}>
+        <span className={`${styles.meterReading} ${s.meterMode === 'CONT' && contPulse ? styles.meterCont : ''}`}>
+          {fmtPrimary()}
+        </span>
+        <span className={styles.meterUnit}>{primaryUnit}</span>
+      </div>
+      {secondary !== null && <div className={styles.meterSecondary}>{secondary.toFixed(1)} Hz</div>}
+      <div className={styles.fgRow} style={{ marginTop: 6 }}>
+        {(['V','A','Ω','CONT'] as const).map(m => (
+          <button key={m}
+            className={`${styles.segBtn} ${s.meterMode === m ? styles.segBtnActive : ''}`}
+            onClick={() => set({ meterMode: m })}>{m}</button>
+        ))}
+      </div>
+    </>
+  );
+
+  if (inline) return body;
 
   return (
     <div className={styles.collapsiblePanel}>
@@ -52,30 +74,7 @@ export default function MultimeterPanel() {
         <span className={styles.collapseArrow}>{open ? '▼' : '▶'}</span>
         <span className={styles.fgSummary}>{s.meterMode} mode</span>
       </button>
-
-      {open && (
-        <div className={styles.collapsibleBody}>
-          <div className={styles.meterDisplay}>
-            <span className={`${styles.meterReading} ${s.meterMode === 'CONT' && contPulse ? styles.meterCont : ''}`}>
-              {fmtPrimary()}
-            </span>
-            <span className={styles.meterUnit}>{primaryUnit}</span>
-          </div>
-          {secondary !== null && (
-            <div className={styles.meterSecondary}>{secondary.toFixed(1)} Hz</div>
-          )}
-          <div className={styles.fgRow} style={{ marginTop: 6 }}>
-            {(['V', 'A', 'Ω', 'CONT'] as const).map(m => (
-              <button key={m}
-                className={`${styles.segBtn} ${s.meterMode === m ? styles.segBtnActive : ''}`}
-                style={s.meterMode === m ? { color: 'var(--accent)', borderColor: 'var(--accent)' } : undefined}
-                onClick={() => set({ meterMode: m })}>
-                {m}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {open && <div className={styles.collapsibleBody}>{body}</div>}
     </div>
   );
 }

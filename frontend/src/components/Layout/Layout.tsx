@@ -1,67 +1,60 @@
-import { ReactNode, useEffect } from 'react';
+import { ReactNode } from 'react';
 import { useAppStore } from '../../store/appStore';
 import styles from './Layout.module.css';
 
-interface Props {
-  left: ReactNode;
-  center: ReactNode;
-}
+const PANEL_NAMES: Record<string, string> = {
+  osc: 'Oscilloscope',
+  proto: 'Protocol Decoder',
+  funcgen: 'Function Generator',
+  code: 'Code Context',
+};
 
-export default function Layout({ left, center }: Props) {
+interface Props { children: ReactNode; }
+
+export default function Layout({ children }: Props) {
   const connectionStatus = useAppStore(s => s.connectionStatus);
   const hardwareFrame = useAppStore(s => s.hardwareFrame);
-  const darkMode = useAppStore(s => s.darkMode);
+  const activePanel = useAppStore(s => s.activePanel);
   const set = useAppStore(s => s.set);
 
-  // Apply theme class to html element
-  useEffect(() => {
-    document.documentElement.classList.toggle('light', !darkMode);
-  }, [darkMode]);
-
-  // Load persisted theme on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('hwbench-theme');
-    if (saved === 'light') set({ darkMode: false });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const toggleTheme = () => {
-    const next = !darkMode;
-    set({ darkMode: next });
-    localStorage.setItem('hwbench-theme', next ? 'dark' : 'light');
-  };
-
-  const statusLabel =
-    connectionStatus === 'connected'
-      ? hardwareFrame?.mode === 'mock' ? 'MOCK · 20fps' : 'LIVE · 20fps'
-      : connectionStatus === 'connecting' ? 'CONNECTING' : 'DISCONNECTED';
-
-  const dotClass =
+  const statusDotClass =
     connectionStatus === 'disconnected' ? styles.disconnected
     : hardwareFrame?.mode === 'mock' ? styles.mock
     : styles.connected;
 
+  const statusLabel =
+    connectionStatus === 'connected'
+      ? hardwareFrame?.mode === 'mock' ? 'MOCK · 20fps' : 'LIVE · 20fps'
+      : connectionStatus === 'connecting' ? 'CONNECTING…' : 'DISCONNECTED';
+
   return (
     <div className={styles.root}>
       <div className={styles.topbar}>
-        <div className={styles.brand}>
-          <div className={styles.brandDot} />
-          <span className={styles.brandName}>HWBench</span>
-          <span className={styles.brandSub}>AI Hardware Debugger</span>
-        </div>
-        <div className={styles.topbarRight}>
-          <div className={styles.status}>
-            <div className={`${styles.statusDot} ${dotClass}`} />
-            {statusLabel}
+        {activePanel ? (
+          <>
+            <button className={styles.backBtn} onClick={() => set({ activePanel: null })}>
+              ← Back
+            </button>
+            <div className={styles.divider} />
+            <span className={styles.panelName}>{PANEL_NAMES[activePanel]}</span>
+          </>
+        ) : (
+          <div className={styles.brand}>
+            <span className={styles.brandName}>HWBench</span>
           </div>
-          <button className={styles.themeToggle} onClick={toggleTheme} title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}>
-            {darkMode ? '☀' : '◑'}
-          </button>
+        )}
+
+        <div className={styles.status}>
+          {hardwareFrame?.mode === 'mock' && <span className={styles.mockBadge}>MOCK</span>}
+          <div className={`${styles.statusDot} ${statusDotClass}`} />
+          {statusLabel}
         </div>
       </div>
-      <div className={styles.panels}>
-        <div className={styles.left}>{left}</div>
-        <div className={styles.center}>{center}</div>
+
+      <div className={styles.content}>
+        <div className={styles.panelView} key={activePanel ?? 'dashboard'}>
+          {children}
+        </div>
       </div>
     </div>
   );
