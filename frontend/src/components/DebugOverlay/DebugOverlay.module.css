@@ -1,0 +1,282 @@
+.floatBtn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+  border-radius: 20px;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+  box-shadow: 0 0 16px rgba(34,211,238,0.12);
+}
+.floatBtn:hover {
+  background: rgba(34,211,238,0.2);
+  box-shadow: 0 0 24px rgba(34,211,238,0.2);
+}
+.floatBtnDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  flex-shrink: 0;
+}
+
+/* Panel */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  pointer-events: none;
+}
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  pointer-events: all;
+}
+.panel {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 300px;
+  height: 70vh;
+  max-height: 600px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-bright);
+  border-radius: 8px 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  pointer-events: all;
+  transform: translateX(0);
+  animation: slideIn 0.2s ease-out;
+  box-shadow: -4px 0 32px rgba(0,0,0,0.4);
+}
+@keyframes slideIn {
+  from { transform: translateX(320px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.panelTitle {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  flex: 1;
+}
+.panelDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 5px var(--accent);
+}
+.closeBtn {
+  font-size: 14px;
+  color: var(--text-muted);
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: color 0.1s, background 0.1s;
+}
+.closeBtn:hover { color: var(--text-primary); background: var(--bg-hover); }
+
+/* Messages */
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.analyzing {
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.spinner {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--border-bright);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.message {
+  padding: 6px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.messageMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.roleUser { color: var(--accent); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.roleClaude { color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.messageBody {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+.messageBody strong { color: var(--text-primary); font-weight: 600; }
+.messageBody code {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  background: var(--bg-active);
+  color: var(--accent);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+.messageBody pre {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  margin: 4px 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.messageBody h1, .messageBody h2, .messageBody h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 4px 0 2px;
+}
+.messageBody ul, .messageBody ol {
+  margin: 4px 0;
+  padding-left: 14px;
+}
+.messageBody li { margin: 2px 0; }
+.messageBody p { margin: 2px 0; }
+
+.userBubble {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  padding: 5px 9px;
+  font-size: 11.5px;
+  color: var(--text-primary);
+  max-width: 90%;
+  align-self: flex-end;
+}
+
+.cursor {
+  display: inline-block;
+  width: 2px;
+  height: 11px;
+  background: var(--accent);
+  border-radius: 1px;
+  margin-left: 2px;
+  vertical-align: middle;
+  animation: blink 1s step-end infinite;
+}
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* Input */
+.inputArea {
+  border-top: 1px solid var(--border);
+  padding: 8px;
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+}
+.input {
+  flex: 1;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-bright);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  resize: none;
+  min-height: 32px;
+  max-height: 72px;
+  line-height: 1.5;
+  overflow-y: auto;
+  transition: border-color 0.12s;
+}
+.input:focus { border-color: var(--accent-border); }
+.input::placeholder { color: var(--text-muted); }
+.sendBtn {
+  width: 32px;
+  height: 32px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+  border-radius: 4px;
+  color: var(--accent);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.12s;
+}
+.sendBtn:hover:not(:disabled) { background: rgba(34,211,238,0.22); }
+.sendBtn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* Listening indicator */
+.listeningIndicator {
+  position: fixed;
+  bottom: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(8,8,8,0.9);
+  border: 1px solid rgba(239,68,68,0.4);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--error);
+  letter-spacing: 0.06em;
+  pointer-events: none;
+}
+.listeningDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--error);
+  animation: listenPulse 0.9s ease-in-out infinite;
+}
+@keyframes listenPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.5); }
+  50% { box-shadow: 0 0 0 5px rgba(239,68,68,0); }
+}
