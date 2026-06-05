@@ -92,8 +92,8 @@ function buildContext(s: ReturnType<typeof useAppStore.getState>) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function DebugOverlay() {
-  const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
+  const [debugContext, setDebugContext] = useState('');
   const [isListening, setIsListening] = useState(false);
   const autoTriggeredRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -101,7 +101,16 @@ export default function DebugOverlay() {
   const recogRef = useRef<unknown>(null);
 
   const s = useAppStore();
-  const { messages, isStreaming, addMessage, appendToLastMessage, setIsStreaming } = s;
+  const {
+    messages,
+    isStreaming,
+    debugOverlayOpen: open,
+    addMessage,
+    appendToLastMessage,
+    setIsStreaming,
+    setDebugOverlayOpen,
+    setLastDebugSummary,
+  } = s;
 
   const visibleMessages = messages.filter(m => !m.hidden).slice(-8);
 
@@ -126,7 +135,6 @@ export default function DebugOverlay() {
       const apiMessages = state.messages
         .filter(m => m.content.length > 0)
         .map(m => ({ role: m.role, content: m.content }));
-      apiMessages.push({ role: 'user', content: text.trim() });
 
       const res = await fetch('/api/chat/message', {
         method: 'POST',
@@ -140,6 +148,7 @@ export default function DebugOverlay() {
       if (!reader) throw new Error('No body');
 
       let buf = '';
+      let assistantText = '';
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -151,7 +160,12 @@ export default function DebugOverlay() {
           const payload = line.slice(6);
           if (payload === '[DONE]') break;
           try { const p = JSON.parse(payload); if (p.text) appendToLastMessage(p.text); } catch { /* skip */ }
+          try { const p = JSON.parse(payload); if (p.text) assistantText += p.text; } catch { /* skip */ }
         }
+      }
+      if (assistantText.trim()) {
+        const firstLine = assistantText.replace(/\*\*/g, '').split('\n').find(line => line.trim())?.trim();
+        setLastDebugSummary(firstLine?.replace(/^[-*]\s*/, '') ?? assistantText.trim().slice(0, 160));
       }
     } catch (e) {
       appendToLastMessage(`\n\n[Error: ${e instanceof Error ? e.message : 'failed'}]`);
@@ -162,17 +176,28 @@ export default function DebugOverlay() {
 
   // ── Auto-trigger analysis when panel opens ─────────────────────────────────
   const openPanel = () => {
-    setOpen(true);
-    if (!autoTriggeredRef.current) {
-      autoTriggeredRef.current = true;
-      setTimeout(() => send('Analyze current hardware state. Flag anything unusual.', true), 100);
-    }
+    setDebugOverlayOpen(true);
   };
 
   const closePanel = () => {
-    setOpen(false);
+    setDebugOverlayOpen(false);
     autoTriggeredRef.current = false;
   };
+
+  const runDebug = (extraContext = debugContext) => {
+    const trimmed = extraContext.trim();
+    const prompt = trimmed
+      ? `Analyze current hardware state with this engineer context: ${trimmed}`
+      : 'Analyze current hardware state. Only flag issues supported by current evidence.';
+    send(prompt, true);
+  };
+
+  useEffect(() => {
+    if (!open || autoTriggeredRef.current) return;
+    autoTriggeredRef.current = true;
+    setTimeout(() => runDebug(''), 100);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // ── Voice recording ────────────────────────────────────────────────────────
   const startListening = () => {
@@ -252,8 +277,39 @@ export default function DebugOverlay() {
           <div className={styles.panel}>
             <div className={styles.panelHeader}>
               <div className={styles.panelDot} />
-              <span className={styles.panelTitle}>⚡ AI DEBUG</span>
+              <span className={styles.panelTitle}>AI DEBUG</span>
               <button className={styles.closeBtn} onClick={closePanel} title="Close (Esc)">✕</button>
+            </div>
+
+            <div className={styles.contextBox}>
+              <label className={styles.contextLabel}>What seems wrong? optional</label>
+              <textarea
+                className={styles.contextInput}
+                placeholder="Optional: describe symptoms, expected behavior, hardware setup, or recent changes..."
+                value={debugContext}
+                onChange={e => setDebugContext(e.target.value)}
+                disabled={isStreaming}
+                rows={2}
+              />
+              <div className={styles.quickChips}>
+                {['Signal looks noisy', 'I2C not responding', 'Motor not spinning', 'Unexpected voltage', 'Timing issue'].map(chip => (
+                  <button
+                    key={chip}
+                    className={styles.quickChip}
+                    onClick={() => setDebugContext(chip)}
+                    disabled={isStreaming}
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
+              <button
+                className={styles.runDebugBtn}
+                onClick={() => runDebug()}
+                disabled={isStreaming}
+              >
+                Run Debug
+              </button>
             </div>
 
             <div className={styles.messages}>
@@ -293,7 +349,7 @@ export default function DebugOverlay() {
               <textarea
                 ref={inputRef}
                 className={styles.input}
-                placeholder="Ask follow-up… (or hold M to speak)"
+                placeholder="Ask follow-up... (or hold M to speak)"
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleInputKey}

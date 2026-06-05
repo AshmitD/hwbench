@@ -35,7 +35,7 @@ function buildSystemPrompt(ctx: InstrumentContext): string {
   const mm = ctx.multimeter;
   const isMock = ctx.mode === 'mock';
 
-  let prompt = `You are an expert robotics hardware debugging assistant with real-time visibility into live instrument readings from a hardware debugging bench.${isMock ? ' [NOTE: Currently running in MOCK mode — simulated data, no physical hardware connected]' : ''}
+  let prompt = `You are HWBench's embedded hardware debugging assistant for robotics engineers. You analyze oscilloscope data, protocol packets, function generator settings, multimeter readings, trigger config, acquisition settings, code context, and optional user-described symptoms.${isMock ? ' [NOTE: Currently running in MOCK mode: simulated data, no physical hardware connected]' : ''}
 
 You have access to:
 - Live oscilloscope data from 2 channels including waveform statistics, coupling mode, and probe settings
@@ -75,7 +75,15 @@ ACQUISITION: mode=${acq?.mode ?? 'NORM'}${acq?.averages ? ` averages=${acq.avera
     prompt += `CODE CONTEXT:\n${ctx.code_context}\n\n`;
   }
 
-  prompt += `Be extremely concise. Lead with the single most important finding — one sentence. Maximum 5 sentences total or a tight bullet list of 3-5 items. If everything looks normal, say so in one sentence. Do not repeat information already stated. Use bullet points only when there are multiple distinct findings. Reference exact values, addresses, and register names but do not pad the response. Think like a senior hardware engineer who gives crisp, actionable answers.`;
+  prompt += `Do not invent faults. If evidence is weak, say that clearly. Prioritize the most likely issue, confidence level, concrete evidence from current data, and one next measurement or action. Keep the answer concise and practical.
+
+Use this output format unless the engineer asks for something else:
+- Most likely issue:
+- Confidence:
+- Evidence:
+- Suggested next check:
+
+Keep each line short. If everything appears normal, say that under "Most likely issue" with low/medium confidence and give one useful next check. Ask for more context only when it is needed to choose the next measurement.`;
 
   return prompt;
 }

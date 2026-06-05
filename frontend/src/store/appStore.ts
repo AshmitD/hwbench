@@ -39,6 +39,8 @@ export interface ChatMessage {
   hidden?: boolean; // auto-triggered system prompts — not shown in chat UI
 }
 
+export type TileId = 'osc' | 'proto' | 'funcgen' | 'code' | 'measurements' | 'ai' | 'cad';
+
 export const VOLT_PER_DIV = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5];
 export const TIME_PER_DIV_MS = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5]; // ms
 // Buffer is 5ms; zoom = 5 / (10 * timeDivMs). Clamped to [1..500]
@@ -106,8 +108,12 @@ interface AppState {
   // Multimeter
   meterMode: 'V' | 'A' | 'Ω' | 'CONT';
 
-  // Navigation — which panel is expanded (null = dashboard)
+  // Navigation — legacy full panel route (null = dashboard)
   activePanel: null | 'osc' | 'proto' | 'funcgen' | 'code';
+
+  // Dashboard workbench
+  visibleTiles: Record<TileId, boolean>;
+  expandedTile: TileId | null;
 
   // Code context
   repoUrl: string;
@@ -122,6 +128,8 @@ interface AppState {
   messages: ChatMessage[];
   isStreaming: boolean;
   activeHighlight: string | null;
+  debugOverlayOpen: boolean;
+  lastDebugSummary: string | null;
 
   // Actions
   setHardwareFrame: (frame: HardwareFrame) => void;
@@ -140,6 +148,10 @@ interface AppState {
   appendToLastMessage: (text: string) => void;
   setIsStreaming: (s: boolean) => void;
   setActiveHighlight: (h: string | null) => void;
+  toggleTile: (tileId: TileId) => void;
+  setExpandedTile: (tileId: TileId | null) => void;
+  setDebugOverlayOpen: (open: boolean) => void;
+  setLastDebugSummary: (summary: string | null) => void;
 }
 
 const MAX_PACKETS = 300;
@@ -187,6 +199,16 @@ export const useAppStore = create<AppState>((setState) => ({
 
   meterMode: 'V',
   activePanel: null,
+  visibleTiles: {
+    osc: true,
+    proto: true,
+    funcgen: true,
+    code: true,
+    measurements: true,
+    ai: true,
+    cad: false,
+  },
+  expandedTile: null,
 
   repoUrl: '',
   repoOwner: '',
@@ -199,6 +221,8 @@ export const useAppStore = create<AppState>((setState) => ({
   messages: [],
   isStreaming: false,
   activeHighlight: null,
+  debugOverlayOpen: false,
+  lastDebugSummary: null,
 
   setHardwareFrame: (frame) => setState({ hardwareFrame: frame }),
 
@@ -232,4 +256,12 @@ export const useAppStore = create<AppState>((setState) => ({
     }),
   setIsStreaming: (s) => setState({ isStreaming: s }),
   setActiveHighlight: (h) => setState({ activeHighlight: h }),
+  toggleTile: (tileId) =>
+    setState((s) => ({
+      visibleTiles: { ...s.visibleTiles, [tileId]: !s.visibleTiles[tileId] },
+      expandedTile: s.expandedTile === tileId ? null : s.expandedTile,
+    })),
+  setExpandedTile: (tileId) => setState({ expandedTile: tileId, activePanel: null }),
+  setDebugOverlayOpen: (open) => setState({ debugOverlayOpen: open }),
+  setLastDebugSummary: (summary) => setState({ lastDebugSummary: summary }),
 }));
