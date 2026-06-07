@@ -226,7 +226,7 @@ export default function DebugOverlay() {
         }
       }
       if (assistantText.trim()) {
-        const firstLine = assistantText.replace(/\*\*/g, '').split('\n').find(line => line.trim())?.trim();
+        const firstLine = assistantText.replace(/\*\*/g, '').split('\n').find(line => line.trim() && !line.startsWith('#'))?.trim();
         setLastDebugSummary(firstLine?.replace(/^[-*]\s*/, '') ?? assistantText.trim().slice(0, 160));
       }
     } catch (e) {
