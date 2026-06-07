@@ -15,7 +15,7 @@ export interface ParsedSchematic {
   componentCount: number;
 }
 
-// ─── Tokeniser for S-expression ───────────────────────────────────────────────
+// ─── Tokeniser ────────────────────────────────────────────────────────────────
 function tokenise(src: string): string[] {
   const tokens: string[] = [];
   let i = 0;
@@ -43,7 +43,7 @@ function parse(tokens: string[], pos = { i: 0 }): SExpr {
   if (tokens[pos.i] === '(') {
     pos.i++;
     const list: SExpr[] = [];
-    while (tokens[pos.i] !== ')') list.push(parse(tokens, pos));
+    while (pos.i < tokens.length && tokens[pos.i] !== ')') list.push(parse(tokens, pos));
     pos.i++;
     return list;
   }
@@ -56,7 +56,6 @@ function unquote(s: string): string {
   return s;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 function isList(x: SExpr): x is SExpr[] { return Array.isArray(x); }
 function head(x: SExpr): string { return isList(x) ? (typeof x[0] === 'string' ? x[0] : '') : x; }
 
@@ -68,15 +67,6 @@ function findAll(node: SExpr, tag: string): SExpr[][] {
   return results;
 }
 
-function getAttr(node: SExpr[], key: string): string | null {
-  for (const child of node) {
-    if (isList(child) && head(child) === key && typeof (child as SExpr[])[1] === 'string') {
-      return unquote((child as SExpr[])[1] as string);
-    }
-  }
-  return null;
-}
-
 // ─── Main parser ──────────────────────────────────────────────────────────────
 export function parseKicadSchematic(content: string, fileName: string): ParsedSchematic {
   const tokens = tokenise(content);
@@ -84,146 +74,238 @@ export function parseKicadSchematic(content: string, fileName: string): ParsedSc
 
   const pos = { i: 0 };
   let root: SExpr;
-  try {
-    root = parse(tokens, pos);
-  } catch {
-    return { fileName, nets: [], componentCount: 0 };
-  }
+  try { root = parse(tokens, pos); }
+  catch { return { fileName, nets: [], componentCount: 0 }; }
 
   if (!isList(root)) return { fileName, nets: [], componentCount: 0 };
+  const rootArr = root as SExpr[];
 
-  // ── Collect symbol instances (placed components) ───────────────────────────
-  interface SymbolInst {
-    ref: string;
-    value: string;
-    x: number;
-    y: number;
-    pins: { number: string; x: number; y: number }[];
+  // ── 1. Parse lib_symbols to build pin-offset map ───────────────────────────
+  // KiCad 6: placed symbols only carry (pin "N" (uuid ...)); actual pin geometry
+  // is in lib_symbols. We must look up dx/dy offsets there.
+  // Map: libId -> Map<pinNumber, {dx, dy}>
+  const libPinMap = new Map<string, Map<string, { dx: number; dy: number }>>();
+
+  const libSymsNode = rootArr.find(n => isList(n) && head(n) === 'lib_symbols') as SExpr[] | undefined;
+  if (libSymsNode) {
+    for (const entry of (libSymsNode as SExpr[]).slice(1)) {
+      if (!isList(entry) || head(entry) !== 'symbol') continue;
+      const entryArr = entry as SExpr[];
+      const libId = typeof entryArr[1] === 'string' ? unquote(entryArr[1]) : '';
+      if (!libId) continue;
+
+      const pinMap = new Map<string, { dx: number; dy: number }>();
+      // Pins live inside sub-symbols like (symbol "Lib:Part_1_1" ...)
+      for (const pn of findAll(entry, 'pin')) {
+        const pnArr = pn as SExpr[];
+        // Lib pins: (pin type dir (at dx dy angle) (length l) ... (number "N" ...))
+        // Placed pins: (pin "N" (uuid "...")) — type is a string literal, not a tag
+        // Distinguish by checking that element [1] and [2] are bare strings (type/dir)
+        if (typeof pnArr[1] !== 'string' || typeof pnArr[2] !== 'string') continue;
+        let dx = 0, dy = 0, number = '';
+        for (const pc of pnArr) {
+          if (isList(pc) && head(pc) === 'at') {
+            const at = pc as SExpr[];
+            dx = parseFloat(typeof at[1] === 'string' ? at[1] : '0');
+            dy = parseFloat(typeof at[2] === 'string' ? at[2] : '0');
+          }
+          if (isList(pc) && head(pc) === 'number') {
+            number = typeof (pc as SExpr[])[1] === 'string' ? unquote((pc as SExpr[])[1] as string) : '';
+          }
+        }
+        if (number && !pinMap.has(number)) pinMap.set(number, { dx, dy });
+      }
+      if (pinMap.size > 0) libPinMap.set(libId, pinMap);
+    }
   }
 
+  // ── 2. Parse placed symbol instances ──────────────────────────────────────
+  // KiCad 6 placed symbol: (symbol (lib_id "Device:R") (at X Y angle) ...)
+  // KiCad 6 lib symbol:    (symbol "Device:R" ...) — second element is a bare string
+  interface SymbolInst {
+    ref: string; value: string; libId: string;
+    x: number; y: number; angle: number;
+    pins: { number: string; x: number; y: number }[];
+  }
   const symbols: SymbolInst[] = [];
-  const symNodes = findAll(root, 'symbol');
 
-  for (const sym of symNodes) {
-    // Skip library symbol definitions (nested inside lib_symbols)
-    const isLibDef = symNodes.some(parent =>
-      parent !== sym && isList(parent) && (parent as SExpr[]).includes(sym as SExpr)
-    );
-    if (isLibDef) continue;
+  for (const node of rootArr) {
+    if (!isList(node) || head(node) !== 'symbol') continue;
+    const nodeArr = node as SExpr[];
+    // Placed symbols have (lib_id "...") as their first child (a list)
+    if (!isList(nodeArr[1]) || head(nodeArr[1]) !== 'lib_id') continue;
 
-    // Get reference and value from properties
-    let ref = '';
-    let value = '';
-    let x = 0, y = 0;
+    const libId = typeof (nodeArr[1] as SExpr[])[1] === 'string'
+      ? unquote((nodeArr[1] as SExpr[])[1] as string) : '';
 
-    // position: (at X Y angle)
-    for (const child of sym) {
+    let ref = '', value = '', x = 0, y = 0, angle = 0;
+    for (const child of nodeArr) {
       if (isList(child) && head(child) === 'at') {
         const at = child as SExpr[];
         x = parseFloat(typeof at[1] === 'string' ? at[1] : '0');
         y = parseFloat(typeof at[2] === 'string' ? at[2] : '0');
+        angle = parseFloat(typeof at[3] === 'string' ? at[3] : '0');
       }
       if (isList(child) && head(child) === 'property') {
         const prop = child as SExpr[];
-        const propName = typeof prop[1] === 'string' ? unquote(prop[1]) : '';
-        const propVal  = typeof prop[2] === 'string' ? unquote(prop[2]) : '';
-        if (propName === 'Reference') ref = propVal;
-        if (propName === 'Value')     value = propVal;
+        const pName = typeof prop[1] === 'string' ? unquote(prop[1]) : '';
+        const pVal  = typeof prop[2] === 'string' ? unquote(prop[2]) : '';
+        if (pName === 'Reference') ref = pVal;
+        if (pName === 'Value')     value = pVal;
       }
     }
+    if (!ref || ref === '~') continue;
 
-    // Collect pin nodes
-    const pinNodes = findAll(sym as SExpr, 'pin');
+    // Transform pin offsets by placement rotation.
+    // KiCad 6 uses Y-down coords; rotation angles are CCW on screen.
+    // In Y-down CCW rotation by θ: x' = dx·cos(θ) + dy·sin(θ), y' = −dx·sin(θ) + dy·cos(θ)
+    const θ = angle * Math.PI / 180;
+    const c = Math.cos(θ), s = Math.sin(θ);
+    const libPins = libPinMap.get(libId);
     const pins: { number: string; x: number; y: number }[] = [];
-    for (const pn of pinNodes) {
-      // pin has (at X Y) child and a number attribute
-      let px = 0, py = 0;
-      let number = '';
-      for (const pc of pn) {
-        if (isList(pc) && head(pc) === 'at') {
-          const pat = pc as SExpr[];
-          px = parseFloat(typeof pat[1] === 'string' ? pat[1] : '0');
-          py = parseFloat(typeof pat[2] === 'string' ? pat[2] : '0');
-        }
-        if (isList(pc) && head(pc) === 'number') {
-          number = typeof (pc as SExpr[])[1] === 'string' ? unquote((pc as SExpr[])[1] as string) : '';
-        }
+    if (libPins) {
+      for (const [number, { dx, dy }] of libPins) {
+        pins.push({ number, x: x + dx * c + dy * s, y: y - dx * s + dy * c });
       }
-      if (number) pins.push({ number, x: x + px, y: y + py });
+    } else {
+      // No lib entry found — place a virtual pin at symbol center
+      pins.push({ number: '?', x, y });
     }
-
-    if (ref && ref !== '~' && !ref.startsWith('#')) {
-      symbols.push({ ref, value, x, y, pins });
-    }
+    symbols.push({ ref, value, libId, x, y, angle, pins });
   }
 
-  // ── Collect net labels ─────────────────────────────────────────────────────
+  const componentCount = symbols.filter(s => !s.ref.startsWith('#')).length;
+
+  // ── 3. Parse wire segments ─────────────────────────────────────────────────
+  interface Seg { x1: number; y1: number; x2: number; y2: number }
+  const wires: Seg[] = [];
+  for (const node of rootArr) {
+    if (!isList(node) || head(node) !== 'wire') continue;
+    const ptsNode = (node as SExpr[]).find(n => isList(n) && head(n) === 'pts') as SExpr[] | undefined;
+    if (!ptsNode) continue;
+    const xys = (ptsNode as SExpr[]).filter(n => isList(n) && head(n) === 'xy') as SExpr[][];
+    if (xys.length < 2) continue;
+    wires.push({
+      x1: parseFloat(typeof xys[0][1] === 'string' ? xys[0][1] : '0'),
+      y1: parseFloat(typeof xys[0][2] === 'string' ? xys[0][2] : '0'),
+      x2: parseFloat(typeof xys[1][1] === 'string' ? xys[1][1] : '0'),
+      y2: parseFloat(typeof xys[1][2] === 'string' ? xys[1][2] : '0'),
+    });
+  }
+
+  // ── 4. Parse net labels ────────────────────────────────────────────────────
   interface NetLabel { name: string; x: number; y: number }
   const labels: NetLabel[] = [];
-
-  for (const tag of ['net_label', 'label', 'global_label', 'hierarchical_label']) {
-    for (const lbl of findAll(root, tag)) {
-      const lblArr = lbl as SExpr[];
-      const name = typeof lblArr[1] === 'string' ? unquote(lblArr[1]) : getAttr(lblArr, 'name') ?? '';
+  for (const tag of ['label', 'global_label', 'hierarchical_label', 'net_label']) {
+    for (const node of rootArr) {
+      if (!isList(node) || head(node) !== tag) continue;
+      const nodeArr = node as SExpr[];
+      const name = typeof nodeArr[1] === 'string' ? unquote(nodeArr[1]) : '';
+      if (!name) continue;
       let lx = 0, ly = 0;
-      for (const child of lblArr) {
+      for (const child of nodeArr) {
         if (isList(child) && head(child) === 'at') {
-          const at = child as SExpr[];
-          lx = parseFloat(typeof at[1] === 'string' ? at[1] : '0');
-          ly = parseFloat(typeof at[2] === 'string' ? at[2] : '0');
+          lx = parseFloat(typeof (child as SExpr[])[1] === 'string' ? (child as SExpr[])[1] as string : '0');
+          ly = parseFloat(typeof (child as SExpr[])[2] === 'string' ? (child as SExpr[])[2] as string : '0');
         }
       }
-      if (name) labels.push({ name, x: lx, y: ly });
+      labels.push({ name, x: lx, y: ly });
     }
   }
-
-  // ── Also collect power symbols as net labels ───────────────────────────────
+  // Power symbols as net labels (connect at their pin position)
   for (const sym of symbols) {
     if (sym.ref.startsWith('#PWR') || sym.ref.startsWith('#FLG')) {
-      labels.push({ name: sym.value, x: sym.x, y: sym.y });
+      const pin = sym.pins[0];
+      labels.push({ name: sym.value, x: pin ? pin.x : sym.x, y: pin ? pin.y : sym.y });
     }
   }
 
-  // ── Match labels to symbol pins by proximity ───────────────────────────────
-  const SNAP = 2.54 * 3; // 3 grid units tolerance
+  // ── 5. Build wire adjacency graph + BFS ────────────────────────────────────
+  // 2 decimal places = 0.01 mm precision; wire endpoints in KiCad are on a
+  // 50-mil (1.27 mm) or 100-mil (2.54 mm) grid so this is more than adequate.
+  const PREC = 2;
+  const key = (x: number, y: number) => `${x.toFixed(PREC)},${y.toFixed(PREC)}`;
+  const adj = new Map<string, Set<string>>();
+  const ensure = (k: string) => { if (!adj.has(k)) adj.set(k, new Set()); };
+  const addEdge = (x1: number, y1: number, x2: number, y2: number) => {
+    const k1 = key(x1, y1), k2 = key(x2, y2);
+    ensure(k1); ensure(k2);
+    adj.get(k1)!.add(k2); adj.get(k2)!.add(k1);
+  };
+  for (const w of wires) addEdge(w.x1, w.y1, w.x2, w.y2);
 
+  // Snap a position to the nearest graph node within 0.15 mm
+  const SNAP = 0.15;
+  const snapKey = (x: number, y: number): string | null => {
+    const k = key(x, y);
+    if (adj.has(k)) return k;
+    let best: string | null = null, bestD = SNAP;
+    for (const nk of adj.keys()) {
+      const [nx, ny] = nk.split(',').map(Number);
+      const d = Math.hypot(nx - x, ny - y);
+      if (d < bestD) { bestD = d; best = nk; }
+    }
+    return best;
+  };
+
+  const bfs = (startKey: string): Set<string> => {
+    const visited = new Set<string>([startKey]);
+    const queue = [startKey];
+    while (queue.length) {
+      const cur = queue.shift()!;
+      for (const nb of adj.get(cur) ?? []) {
+        if (!visited.has(nb)) { visited.add(nb); queue.push(nb); }
+      }
+    }
+    return visited;
+  };
+
+  // ── 6. Match labels → pins via wire graph ─────────────────────────────────
   const netMap = new Map<string, SchematicEntry[]>();
 
-  for (const sym of symbols) {
-    if (sym.ref.startsWith('#')) continue;
-    for (const pin of sym.pins) {
-      // Find nearest label
-      let nearest: NetLabel | null = null;
-      let minDist = SNAP;
-      for (const lbl of labels) {
-        const d = Math.hypot(lbl.x - pin.x, lbl.y - pin.y);
-        if (d < minDist) { minDist = d; nearest = lbl; }
-      }
-      if (nearest) {
-        const net = nearest.name;
-        if (!netMap.has(net)) netMap.set(net, []);
-        netMap.get(net)!.push({ ref: sym.ref, value: sym.value, pin: pin.number });
+  for (const label of labels) {
+    const startKey = snapKey(label.x, label.y);
+    const connected: Set<string> = startKey ? bfs(startKey) : new Set();
+
+    for (const sym of symbols) {
+      if (sym.ref.startsWith('#')) continue;
+      for (const pin of sym.pins) {
+        const pk = snapKey(pin.x, pin.y);
+        if (!pk || !connected.has(pk)) continue;
+        if (!netMap.has(label.name)) netMap.set(label.name, []);
+        netMap.get(label.name)!.push({ ref: sym.ref, value: sym.value, pin: pin.number });
       }
     }
   }
 
-  // ── Also pull nets from wire+junction topology via net_label at wire ends ───
-  // (covered above via label proximity)
+  // ── 7. Fallback: proximity match (catches direct label-to-pin with no wire) ─
+  if (netMap.size === 0 && labels.length > 0) {
+    const PROX = 5.08; // 200-mil; direct connections or close placements
+    for (const label of labels) {
+      for (const sym of symbols) {
+        if (sym.ref.startsWith('#')) continue;
+        for (const pin of sym.pins) {
+          if (Math.hypot(pin.x - label.x, pin.y - label.y) <= PROX) {
+            if (!netMap.has(label.name)) netMap.set(label.name, []);
+            netMap.get(label.name)!.push({ ref: sym.ref, value: sym.value, pin: pin.number });
+          }
+        }
+      }
+    }
+  }
 
-  // ── Build sorted output ────────────────────────────────────────────────────
+  // ── 8. Build sorted output ────────────────────────────────────────────────
   const nets: ParsedNet[] = [];
   for (const [netName, entries] of netMap.entries()) {
-    // Deduplicate entries
     const seen = new Set<string>();
     const unique = entries.filter(e => {
-      const key = `${e.ref}.${e.pin}`;
-      if (seen.has(key)) return false;
-      seen.add(key); return true;
+      const k = `${e.ref}.${e.pin}`;
+      if (seen.has(k)) return false;
+      seen.add(k); return true;
     });
     nets.push({ netName, entries: unique });
   }
 
-  // Sort: power nets last, signal nets first
   nets.sort((a, b) => {
     const aPwr = /^(VCC|VDD|GND|AGND|DGND|\+\d|PWR)/i.test(a.netName);
     const bPwr = /^(VCC|VDD|GND|AGND|DGND|\+\d|PWR)/i.test(b.netName);
@@ -231,7 +313,6 @@ export function parseKicadSchematic(content: string, fileName: string): ParsedSc
     return a.netName.localeCompare(b.netName);
   });
 
-  const componentCount = symbols.filter(s => !s.ref.startsWith('#')).length;
   return { fileName, nets, componentCount };
 }
 
