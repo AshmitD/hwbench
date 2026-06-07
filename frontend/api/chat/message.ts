@@ -1,11 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-let _client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!_client) _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  return _client;
-}
+export const config = { runtime: 'edge' };
 
 interface ChatMessage { role: 'user' | 'assistant'; content: string; }
 
@@ -33,7 +28,7 @@ function buildSystemPrompt(ctx: InstrumentContext): string {
   const mm = ctx.multimeter;
   const isMock = ctx.mode === 'mock';
 
-  let prompt = `You are HWBench's embedded hardware debugging assistant for robotics engineers. You analyze oscilloscope data, protocol packets, function generator settings, multimeter readings, trigger config, acquisition settings, code context, and optional user-described symptoms.${isMock ? ' [NOTE: Currently running in MOCK mode: simulated data, no physical hardware connected]' : ''}
+  let prompt = `You are HWBench's embedded hardware debugging assistant for robotics engineers. Analyze oscilloscope data, protocol packets, function generator settings, multimeter readings, trigger config, acquisition settings, and code context.${isMock ? ' [NOTE: MOCK mode — simulated data, no physical hardware connected]' : ''}
 
 LIVE INSTRUMENT READINGS:
 
@@ -60,7 +55,7 @@ DEMO SCENARIO: ${ctx.demo_scenario ?? 'unspecified'}
 
   if (ctx.code_context) prompt += `CODE CONTEXT:\n${ctx.code_context}\n\n`;
 
-  prompt += `Do not invent a fault. If evidence is weak, say so. Answer like a hardware debug note, not a chatbot. Use actual bench evidence.
+  prompt += `Do not invent a fault. Answer like a hardware debug note, not a chatbot.
 
 Use exactly this compact Markdown structure:
 
@@ -81,45 +76,64 @@ Keep the full answer under 120 words unless asked for detail.`;
   return prompt;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
   }
 
-  const { messages, context } = req.body as { messages: ChatMessage[]; context: InstrumentContext };
+  let messages: ChatMessage[];
+  let context: InstrumentContext;
+  try {
+    const body = await req.json() as { messages: ChatMessage[]; context: InstrumentContext };
+    messages = body.messages;
+    context = body.context ?? {};
+  } catch {
+    return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
+  }
 
   if (!messages || messages.length === 0) {
-    return res.status(400).json({ error: 'Messages required' });
+    return new Response(JSON.stringify({ error: 'Messages required' }), { status: 400 });
   }
 
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return new Response(JSON.stringify({ error: 'API key not configured' }), { status: 500 });
+  }
 
-  try {
-    const stream = getClient().messages.stream({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 700,
-      system: buildSystemPrompt(context || {}),
-      messages: messages.map(m => ({ role: m.role, content: m.content })),
-    });
+  const client = new Anthropic({ apiKey });
+  const encoder = new TextEncoder();
 
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-        res.write(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`);
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        const anthropicStream = client.messages.stream({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 700,
+          system: buildSystemPrompt(context),
+          messages: messages.map(m => ({ role: m.role, content: m.content })),
+        });
+
+        for await (const event of anthropicStream) {
+          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`));
+          }
+        }
+
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        controller.close();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: msg })}\n\n`));
+        controller.close();
       }
-    }
+    },
+  });
 
-    res.write('data: [DONE]\n\n');
-    res.end();
-  } catch (error) {
-    console.error('Chat error:', error);
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Chat failed', message: error instanceof Error ? error.message : 'Unknown' });
-    } else {
-      res.write(`data: ${JSON.stringify({ error: 'Stream error' })}\n\n`);
-      res.end();
-    }
-  }
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Access-Control-Allow-Origin': '*',
+    },
+  });
 }
