@@ -1,6 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-
-export const config = { runtime: 'edge' };
+import type { IncomingMessage, ServerResponse } from 'http';
 
 interface ChatMessage { role: 'user' | 'assistant'; content: string; }
 
@@ -76,64 +75,75 @@ Keep the full answer under 120 words unless asked for detail.`;
   return prompt;
 }
 
-export default async function handler(req: Request): Promise<Response> {
+function readBody(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', chunk => { data += chunk; });
+    req.on('end', () => resolve(data));
+    req.on('error', reject);
+  });
+}
+
+export default async function handler(req: IncomingMessage, res: ServerResponse) {
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+    res.writeHead(405, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Method not allowed' }));
+    return;
   }
 
   let messages: ChatMessage[];
   let context: InstrumentContext;
   try {
-    const body = await req.json() as { messages: ChatMessage[]; context: InstrumentContext };
+    const raw = await readBody(req);
+    const body = JSON.parse(raw) as { messages: ChatMessage[]; context: InstrumentContext };
     messages = body.messages;
     context = body.context ?? {};
   } catch {
-    return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Invalid JSON' }));
+    return;
   }
 
   if (!messages || messages.length === 0) {
-    return new Response(JSON.stringify({ error: 'Messages required' }), { status: 400 });
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Messages required' }));
+    return;
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'API key not configured' }), { status: 500 });
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'API key not configured' }));
+    return;
   }
 
-  const client = new Anthropic({ apiKey });
-  const encoder = new TextEncoder();
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+  });
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        const anthropicStream = client.messages.stream({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 700,
-          system: buildSystemPrompt(context),
-          messages: messages.map(m => ({ role: m.role, content: m.content })),
-        });
+  try {
+    const client = new Anthropic({ apiKey });
+    const stream = client.messages.stream({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 700,
+      system: buildSystemPrompt(context),
+      messages: messages.map(m => ({ role: m.role, content: m.content })),
+    });
 
-        for await (const event of anthropicStream) {
-          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`));
-          }
-        }
-
-        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-        controller.close();
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Unknown error';
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: msg })}\n\n`));
-        controller.close();
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        res.write(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`);
       }
-    },
-  });
+    }
 
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Access-Control-Allow-Origin': '*',
-    },
-  });
+    res.write('data: [DONE]\n\n');
+    res.end();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    res.write(`data: ${JSON.stringify({ error: msg })}\n\n`);
+    res.end();
+  }
 }
