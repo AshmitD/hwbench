@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, KeyboardEvent } from 'react';
 import { useAppStore, ChatMessage, VOLT_PER_DIV } from '../../store/appStore';
-import { buildOfflineDebugResponse, isHostedDemo } from '../../utils/offlineDebug';
 import styles from './DebugOverlay.module.css';
 
 // ─── Markdown renderer ────────────────────────────────────────────────────────
@@ -134,23 +133,6 @@ export default function DebugOverlay() {
 
     try {
       const state = useAppStore.getState();
-
-      if (isHostedDemo()) {
-        const response = buildOfflineDebugResponse({
-          scenario: state.demoScenario,
-          packets: state.packets,
-          note: text,
-          ch1Frequency: state.hardwareFrame?.oscilloscope.ch1.frequency,
-          ch2Frequency: state.hardwareFrame?.oscilloscope.ch2.frequency,
-          ch1Vpp: state.hardwareFrame?.oscilloscope.ch1.vpp,
-          ch2Vpp: state.hardwareFrame?.oscilloscope.ch2.vpp,
-        });
-        await new Promise(resolve => window.setTimeout(resolve, 220));
-        appendToLastMessage(response);
-        const firstLine = response.split('\n').find(line => line.trim() && !line.startsWith('###'))?.trim();
-        setLastDebugSummary(firstLine ?? 'Offline debug snapshot ready.');
-        return;
-      }
 
       const apiMessages = state.messages
         .filter(m => m.content.length > 0)
