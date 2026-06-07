@@ -1,5 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { useAppStore } from '../store/appStore';
+import { generateBrowserMockFrame } from '../utils/browserMockHardware';
+
+function shouldUseBrowserMock(): boolean {
+  const host = window.location.hostname;
+  return host !== 'localhost' && host !== '127.0.0.1' && host !== '::1';
+}
 
 export function useHardwareSocket() {
   const setHardwareFrame = useAppStore((s) => s.setHardwareFrame);
@@ -8,8 +14,29 @@ export function useHardwareSocket() {
   const demoScenario = useAppStore((s) => s.demoScenario);
   const wsRef = useRef<WebSocket | null>(null);
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const browserMockRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
+    if (shouldUseBrowserMock()) {
+      setConnectionStatus('connected');
+      browserMockRef.current = setInterval(() => {
+        const frame = generateBrowserMockFrame(useAppStore.getState().demoScenario);
+        setHardwareFrame({
+          timestamp: frame.timestamp,
+          mode: frame.mode,
+          scenario: frame.scenario,
+          oscilloscope: frame.oscilloscope,
+        });
+        if (frame.protocol.newPackets.length > 0) {
+          addPackets(frame.protocol.newPackets);
+        }
+      }, 50);
+
+      return () => {
+        if (browserMockRef.current) clearInterval(browserMockRef.current);
+      };
+    }
+
     let alive = true;
 
     function connect() {
