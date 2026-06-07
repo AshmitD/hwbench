@@ -26,6 +26,7 @@ export interface Packet {
 export interface HardwareFrame {
   timestamp: number;
   mode: 'mock' | 'live';
+  scenario?: DemoScenario;
   oscilloscope: { ch1: ChannelData; ch2: ChannelData };
 }
 
@@ -40,6 +41,8 @@ export interface ChatMessage {
 }
 
 export type TileId = 'osc' | 'proto' | 'funcgen' | 'code' | 'measurements' | 'ai' | 'cad';
+export type DemoScenario = 'motor' | 'i2c_nack' | 'driver_fault' | 'noisy' | 'pid' | 'pwm';
+export type HighlightTarget = TileId | 'debug' | null;
 
 export const VOLT_PER_DIV = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5];
 export const TIME_PER_DIV_MS = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5]; // ms
@@ -130,10 +133,16 @@ interface AppState {
   activeHighlight: string | null;
   debugOverlayOpen: boolean;
   lastDebugSummary: string | null;
+  learnMoreOpen: boolean;
+  localRunOpen: boolean;
+  highlightedTile: HighlightTarget;
+  demoScenario: DemoScenario;
+  showGuidedHotspots: boolean;
 
   // Actions
   setHardwareFrame: (frame: HardwareFrame) => void;
   addPackets: (packets: Packet[]) => void;
+  clearPackets: () => void;
   setConnectionStatus: (s: 'connecting' | 'connected' | 'disconnected') => void;
   toggleOscilloscopePause: () => void;
   toggleProtocolPause: () => void;
@@ -152,6 +161,12 @@ interface AppState {
   setExpandedTile: (tileId: TileId | null) => void;
   setDebugOverlayOpen: (open: boolean) => void;
   setLastDebugSummary: (summary: string | null) => void;
+  setLearnMoreOpen: (open: boolean) => void;
+  setLocalRunOpen: (open: boolean) => void;
+  setHighlightedTile: (target: HighlightTarget) => void;
+  setDemoScenario: (scenario: DemoScenario) => void;
+  dismissGuidedHotspots: () => void;
+  replayGuidedHotspots: () => void;
 }
 
 const MAX_PACKETS = 300;
@@ -223,6 +238,11 @@ export const useAppStore = create<AppState>((setState) => ({
   activeHighlight: null,
   debugOverlayOpen: false,
   lastDebugSummary: null,
+  learnMoreOpen: false,
+  localRunOpen: false,
+  highlightedTile: null,
+  demoScenario: 'motor',
+  showGuidedHotspots: true,
 
   setHardwareFrame: (frame) => setState({ hardwareFrame: frame }),
 
@@ -231,6 +251,7 @@ export const useAppStore = create<AppState>((setState) => ({
       const merged = [...state.packets, ...newPkts];
       return { packets: merged.length > MAX_PACKETS ? merged.slice(-MAX_PACKETS) : merged };
     }),
+  clearPackets: () => setState({ packets: [] }),
 
   setConnectionStatus: (s) => setState({ connectionStatus: s }),
 
@@ -264,4 +285,10 @@ export const useAppStore = create<AppState>((setState) => ({
   setExpandedTile: (tileId) => setState({ expandedTile: tileId, activePanel: null }),
   setDebugOverlayOpen: (open) => setState({ debugOverlayOpen: open }),
   setLastDebugSummary: (summary) => setState({ lastDebugSummary: summary }),
+  setLearnMoreOpen: (open) => setState({ learnMoreOpen: open }),
+  setLocalRunOpen: (open) => setState({ localRunOpen: open }),
+  setHighlightedTile: (target) => setState({ highlightedTile: target }),
+  setDemoScenario: (scenario) => setState({ demoScenario: scenario, packets: [], lastDebugSummary: null }),
+  dismissGuidedHotspots: () => setState({ showGuidedHotspots: false }),
+  replayGuidedHotspots: () => setState({ showGuidedHotspots: true }),
 }));

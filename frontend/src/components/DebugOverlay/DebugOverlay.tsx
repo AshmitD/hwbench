@@ -86,6 +86,7 @@ function buildContext(s: ReturnType<typeof useAppStore.getState>) {
     function_generator: { waveform: s.funcWaveform, frequency: `${s.funcFrequency}${s.funcFreqUnit}`, amplitude: `${s.funcAmplitude}Vpp`, w1: s.funcW1, w2: s.funcW2 },
     multimeter: { mode: s.meterMode, reading: 'live' },
     code_context: codeCtx,
+    demo_scenario: s.demoScenario,
     mode: s.hardwareFrame?.mode ?? 'mock',
   };
 }
@@ -187,8 +188,8 @@ export default function DebugOverlay() {
   const runDebug = (extraContext = debugContext) => {
     const trimmed = extraContext.trim();
     const prompt = trimmed
-      ? `Analyze current hardware state with this engineer context: ${trimmed}`
-      : 'Analyze current hardware state. Only flag issues supported by current evidence.';
+      ? `Analyze current bench state for the ${s.demoScenario} demo. Engineer note: ${trimmed}`
+      : `Analyze current bench state for the ${s.demoScenario} demo. If there is no clear fault, say so.`;
     send(prompt, true);
   };
 
@@ -285,7 +286,7 @@ export default function DebugOverlay() {
               <label className={styles.contextLabel}>What seems wrong? optional</label>
               <textarea
                 className={styles.contextInput}
-                placeholder="Optional: describe symptoms, expected behavior, hardware setup, or recent changes..."
+                placeholder="Optional: what looks wrong? e.g. motor stutters after SPI write"
                 value={debugContext}
                 onChange={e => setDebugContext(e.target.value)}
                 disabled={isStreaming}
@@ -349,7 +350,7 @@ export default function DebugOverlay() {
               <textarea
                 ref={inputRef}
                 className={styles.input}
-                placeholder="Ask follow-up... (or hold M to speak)"
+                placeholder="Optional: what looks wrong? e.g. motor stutters after SPI write"
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleInputKey}

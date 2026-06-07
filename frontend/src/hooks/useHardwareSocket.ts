@@ -5,6 +5,7 @@ export function useHardwareSocket() {
   const setHardwareFrame = useAppStore((s) => s.setHardwareFrame);
   const addPackets = useAppStore((s) => s.addPackets);
   const setConnectionStatus = useAppStore((s) => s.setConnectionStatus);
+  const demoScenario = useAppStore((s) => s.demoScenario);
   const wsRef = useRef<WebSocket | null>(null);
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -21,6 +22,7 @@ export function useHardwareSocket() {
       ws.onopen = () => {
         if (!alive) { ws.close(); return; }
         setConnectionStatus('connected');
+        ws.send(JSON.stringify({ type: 'set_scenario', scenario: useAppStore.getState().demoScenario }));
       };
 
       ws.onmessage = (e) => {
@@ -30,6 +32,7 @@ export function useHardwareSocket() {
             setHardwareFrame({
               timestamp: data.timestamp,
               mode: data.mode,
+              scenario: data.scenario,
               oscilloscope: data.oscilloscope,
             });
             if (data.protocol?.newPackets?.length > 0) {
@@ -59,4 +62,10 @@ export function useHardwareSocket() {
       wsRef.current?.close();
     };
   }, [setHardwareFrame, addPackets, setConnectionStatus]);
+
+  useEffect(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'set_scenario', scenario: demoScenario }));
+    }
+  }, [demoScenario]);
 }

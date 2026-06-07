@@ -23,6 +23,7 @@ interface InstrumentContext {
   function_generator?: { waveform: string; frequency: string; amplitude: string; w1: boolean; w2: boolean };
   multimeter?: { mode: string; reading: string };
   code_context?: string | null;
+  demo_scenario?: 'motor' | 'i2c_nack' | 'driver_fault' | 'noisy' | 'pid' | 'pwm';
   mode?: 'mock' | 'live';
 }
 
@@ -55,6 +56,8 @@ TRIGGER: source=${trig?.source ?? 'CH1'} edge=${trig?.edge ?? 'rising'} level=${
 
 ACQUISITION: mode=${acq?.mode ?? 'NORM'}${acq?.averages ? ` averages=${acq.averages}` : ''}
 
+DEMO SCENARIO: ${ctx.demo_scenario ?? 'unspecified'}
+
 `;
 
   if (fg) {
@@ -75,15 +78,23 @@ ACQUISITION: mode=${acq?.mode ?? 'NORM'}${acq?.averages ? ` averages=${acq.avera
     prompt += `CODE CONTEXT:\n${ctx.code_context}\n\n`;
   }
 
-  prompt += `Do not invent faults. If evidence is weak, say that clearly. Prioritize the most likely issue, confidence level, concrete evidence from current data, and one next measurement or action. Keep the answer concise and practical.
+  prompt += `Do not invent a fault. If evidence is weak, say so. Answer like a hardware debug note, not a chatbot. Use actual bench evidence: waveform values, packet errors, registers, UART logs, trigger/config, and optional user notes.
 
-Use this output format unless the engineer asks for something else:
-- Most likely issue:
-- Confidence:
-- Evidence:
-- Suggested next check:
+Use exactly this compact Markdown structure:
 
-Keep each line short. If everything appears normal, say that under "Most likely issue" with low/medium confidence and give one useful next check. Ask for more context only when it is needed to choose the next measurement.`;
+### Finding
+<one sentence: likely issue or "No clear fault detected.">
+
+### Why I think this
+- <2-3 bullets using actual evidence from the bench>
+
+### Where to look
+- <1-3 specific signals, wires, files, registers, or settings>
+
+### Next check / fix
+- <1-3 concrete actions>
+
+If nothing obvious is wrong, say "No clear fault detected." and do not manufacture a problem. Keep the full answer under 120 words unless asked for detail.`;
 
   return prompt;
 }
@@ -108,7 +119,7 @@ router.post('/message', async (req, res) => {
 
     const stream = getClient().messages.stream({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
+      max_tokens: 700,
       system: systemPrompt,
       messages: messages.map(m => ({ role: m.role, content: m.content })),
     });

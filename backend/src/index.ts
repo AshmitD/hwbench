@@ -8,7 +8,7 @@ import uploadRoutes from './routes/upload.js';
 import analysisRoutes from './routes/analysis.js';
 import chatRoutes from './routes/chat.js';
 import githubRoutes from './routes/github.js';
-import { generateFrame } from './services/mockHardware.js';
+import { generateFrame, MockScenario } from './services/mockHardware.js';
 
 dotenv.config();
 
@@ -33,10 +33,27 @@ const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws: WebSocket) => {
   console.log('[WS] Client connected');
+  let scenario: MockScenario = 'motor';
+
+  ws.on('message', (raw) => {
+    try {
+      const msg = JSON.parse(raw.toString()) as { type?: string; scenario?: MockScenario };
+      if (
+        msg.type === 'set_scenario' &&
+        msg.scenario &&
+        ['motor', 'i2c_nack', 'driver_fault', 'noisy', 'pid', 'pwm'].includes(msg.scenario)
+      ) {
+        scenario = msg.scenario;
+        console.log(`[WS] Scenario -> ${scenario}`);
+      }
+    } catch {
+      // Ignore malformed client control messages.
+    }
+  });
 
   const interval = setInterval(() => {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(generateFrame()));
+      ws.send(JSON.stringify(generateFrame(scenario)));
     }
   }, 50);
 

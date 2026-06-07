@@ -19,6 +19,7 @@ import FuncGenPanel from '../Panels/FuncGenPanel';
 import CodeContextPanel from '../CodeContext/CodeContextPanel';
 import TilePicker from './TilePicker';
 import WorkbenchTile from './WorkbenchTile';
+import GuidedHotspots from '../Demo/GuidedHotspots';
 import styles from './Dashboard.module.css';
 
 const TILE_ORDER: TileId[] = ['osc', 'proto', 'measurements', 'funcgen', 'code', 'ai', 'cad'];
@@ -160,7 +161,7 @@ function TileBody({ tileId, expanded }: { tileId: TileId; expanded: boolean }) {
   if (tileId === 'proto') {
     return (
       <div className={styles.protoTable}>
-        {recentPackets.length === 0 ? <span className={styles.emptyText}>Waiting for bus traffic</span> : recentPackets.map(pkt => (
+        {recentPackets.length === 0 ? <span className={styles.emptyText}>Listening to mock motor controller bus...</span> : recentPackets.map(pkt => (
           <div key={pkt.id} className={styles.protoRow}>
             <span className={`${styles.protoBadge} ${styles[pkt.protocol.toLowerCase()]}`}>{pkt.protocol}</span>
             <span className={styles.protoDir}>{pkt.direction}</span>
@@ -205,7 +206,7 @@ function TileBody({ tileId, expanded }: { tileId: TileId; expanded: boolean }) {
     ) : (
       <div className={styles.emptyState}>
         <Braces size={22} />
-        <span>Add a repository or source file for code-aware debug context.</span>
+        <span>Firmware context slot. Add a GitHub repo when you want the AI to read code with the bench.</span>
       </div>
     );
   }
@@ -213,7 +214,7 @@ function TileBody({ tileId, expanded }: { tileId: TileId; expanded: boolean }) {
   if (tileId === 'ai') {
     return (
       <div className={styles.aiTile}>
-        <p>{s.lastDebugSummary ?? 'Ready to inspect scope data, bus traffic, generator state, meter readings, and code context.'}</p>
+        <p>{s.lastDebugSummary ?? 'Hit DEBUG when the bench looks wrong. The AI receives traces, packets, trigger settings, readings, and optional notes.'}</p>
         <button
           className={styles.primaryBtn}
           onClick={(e) => { e.stopPropagation(); set({ debugOverlayOpen: true }); }}
@@ -227,7 +228,7 @@ function TileBody({ tileId, expanded }: { tileId: TileId; expanded: boolean }) {
   return (
     <div className={styles.emptyState}>
       <Cpu size={22} />
-      <span>Robot geometry and assembly context can live here when CAD inputs are connected.</span>
+      <span>Robot/CAD context can sit beside the electrical session when assembly geometry matters.</span>
     </div>
   );
 }
@@ -235,9 +236,9 @@ function TileBody({ tileId, expanded }: { tileId: TileId; expanded: boolean }) {
 function tileMeta(tileId: TileId, s: ReturnType<typeof useAppStore.getState>) {
   const live = !s.oscilloscopePaused && s.connectionStatus === 'connected';
   const meta: Record<TileId, { title: string; subtitle: string; icon: React.ReactNode; status?: React.ReactNode }> = {
-    osc: { title: 'Oscilloscope', subtitle: 'Waveform capture', icon: <Activity size={16} />, status: <StatusPill tone={live ? 'live' : 'warn'}>{live ? 'RUN' : 'HOLD'}</StatusPill> },
+    osc: { title: 'Oscilloscope', subtitle: 'CH1 motor phase · CH2 control', icon: <Activity size={16} />, status: <StatusPill tone={live ? 'live' : 'warn'}>{live ? 'RUN' : 'HOLD'}</StatusPill> },
     proto: { title: 'Protocol Traffic', subtitle: `${s.packets.length} packets buffered`, icon: <RadioTower size={16} />, status: <StatusPill tone={s.protocolPaused ? 'warn' : 'live'}>{s.protocolPaused ? 'PAUSED' : 'LIVE'}</StatusPill> },
-    measurements: { title: 'Measurements', subtitle: 'Scope statistics', icon: <Ruler size={16} /> },
+    measurements: { title: 'Measurements', subtitle: 'Freq · Vpp · RMS · duty', icon: <Ruler size={16} /> },
     funcgen: { title: 'Func Gen + DMM', subtitle: 'Stimulus and meter', icon: <Zap size={16} /> },
     code: { title: 'Code Context', subtitle: s.repoOwner ? `${s.repoOwner}/${s.repoName}` : 'No repo loaded', icon: <TerminalSquare size={16} /> },
     ai: { title: 'AI Debug', subtitle: 'Evidence-focused assistant', icon: <Bot size={16} />, status: <StatusPill>{s.isStreaming ? 'THINKING' : 'READY'}</StatusPill> },
@@ -255,10 +256,11 @@ export default function Dashboard() {
 
   return (
     <div className={styles.workbench}>
+      <GuidedHotspots />
       <header className={styles.workbenchHeader}>
         <div>
-          <h1>Modular Bench</h1>
-          <p>{expandedTile ? 'Focused instrument with live docked context' : 'Live instrumentation workspace'}</p>
+          <h1>Signals, packets, and code in one debug loop.</h1>
+          <p>{expandedTile ? 'Focused instrument, with the rest of the bench docked nearby.' : 'Mock robotics hardware is streaming into the hosted demo.'}</p>
         </div>
         <TilePicker />
       </header>
@@ -269,6 +271,7 @@ export default function Dashboard() {
             id={expandedTile}
             {...tileMeta(expandedTile, s)}
             isExpanded
+            isHighlighted={s.highlightedTile === expandedTile}
             onExpand={setExpandedTile}
             onCollapse={() => setExpandedTile(null)}
           >
@@ -281,6 +284,7 @@ export default function Dashboard() {
                 id={tileId}
                 {...tileMeta(tileId, s)}
                 isDocked
+                isHighlighted={s.highlightedTile === tileId}
                 onExpand={setExpandedTile}
               >
                 <TileBody tileId={tileId} expanded={false} />
@@ -295,6 +299,7 @@ export default function Dashboard() {
               key={tileId}
               id={tileId}
               {...tileMeta(tileId, s)}
+              isHighlighted={s.highlightedTile === tileId}
               onExpand={setExpandedTile}
             >
               <TileBody tileId={tileId} expanded={false} />

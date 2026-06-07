@@ -12,6 +12,7 @@ interface Props {
   children: ReactNode;
   isExpanded?: boolean;
   isDocked?: boolean;
+  isHighlighted?: boolean;
   onExpand: (id: TileId) => void;
   onCollapse?: () => void;
 }
@@ -25,6 +26,7 @@ export default function WorkbenchTile({
   children,
   isExpanded = false,
   isDocked = false,
+  isHighlighted = false,
   onExpand,
   onCollapse,
 }: Props) {
@@ -34,7 +36,7 @@ export default function WorkbenchTile({
 
   return (
     <section
-      className={`${styles.tile} ${isExpanded ? styles.expandedTile : ''} ${isDocked ? styles.dockedTile : ''}`}
+      className={`${styles.tile} ${isExpanded ? styles.expandedTile : ''} ${isDocked ? styles.dockedTile : ''} ${isHighlighted ? styles.highlightTile : ''}`}
       onClick={handleShellClick}
       aria-label={`${title} tile`}
     >
