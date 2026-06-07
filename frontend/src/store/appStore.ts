@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { ParsedSchematic } from '../utils/parseKicad';
 
 export interface ChannelData {
   samples: number[];
@@ -40,7 +41,7 @@ export interface ChatMessage {
   hidden?: boolean; // auto-triggered system prompts — not shown in chat UI
 }
 
-export type TileId = 'osc' | 'proto' | 'funcgen' | 'code' | 'measurements' | 'ai' | 'cad';
+export type TileId = 'osc' | 'proto' | 'funcgen' | 'code' | 'measurements' | 'ai' | 'cad' | 'schematic';
 export type DemoScenario = 'motor' | 'i2c_nack' | 'driver_fault' | 'noisy' | 'pid' | 'pwm';
 export type HighlightTarget = TileId | 'debug' | null;
 
@@ -126,6 +127,10 @@ interface AppState {
   selectedFile: { path: string; content: string } | null;
   repoLoading: boolean;
   repoError: string | null;
+
+  // Schematic
+  schematic: ParsedSchematic | null;
+  setSchematic: (s: ParsedSchematic | null) => void;
 
   // AI chat
   messages: ChatMessage[];
@@ -222,6 +227,7 @@ export const useAppStore = create<AppState>((setState) => ({
     measurements: true,
     ai: true,
     cad: false,
+    schematic: false,
   },
   expandedTile: null,
 
@@ -232,6 +238,9 @@ export const useAppStore = create<AppState>((setState) => ({
   selectedFile: null,
   repoLoading: false,
   repoError: null,
+
+  schematic: null,
+  setSchematic: (s) => setState({ schematic: s }),
 
   messages: [],
   isStreaming: false,

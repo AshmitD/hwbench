@@ -14,6 +14,7 @@ interface InstrumentContext {
   function_generator?: { waveform: string; frequency: string; amplitude: string; w1: boolean; w2: boolean };
   multimeter?: { mode: string; reading: string };
   code_context?: string | null;
+  schematic_context?: string | null;
   demo_scenario?: string;
   mode?: 'mock' | 'live';
 }
@@ -53,6 +54,10 @@ DEMO SCENARIO: ${ctx.demo_scenario ?? 'unspecified'}
   }
 
   if (ctx.code_context) prompt += `CODE CONTEXT:\n${ctx.code_context}\n\n`;
+
+  if (ctx.schematic_context) {
+    prompt += `SCHEMATIC:\n${ctx.schematic_context}\n\nCross-reference component names and net names from the schematic when diagnosing faults.\n\n`;
+  }
 
   prompt += `Do not invent a fault. Answer like a hardware debug note, not a chatbot.
 

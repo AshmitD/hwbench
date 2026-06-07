@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, KeyboardEvent } from 'react';
 import { useAppStore, ChatMessage, VOLT_PER_DIV, HardwareFrame, Packet } from '../../store/appStore';
+import { formatNetlistForPrompt } from '../../utils/parseKicad';
+import { buildMarkdownReport, downloadMarkdown } from '../../utils/exportReport';
 import styles from './DebugOverlay.module.css';
 
 // ─── Markdown renderer ────────────────────────────────────────────────────────
@@ -140,6 +142,7 @@ function buildContext(s: ReturnType<typeof useAppStore.getState>) {
     function_generator: { waveform: s.funcWaveform, frequency: `${s.funcFrequency}${s.funcFreqUnit}`, amplitude: `${s.funcAmplitude}Vpp`, w1: s.funcW1, w2: s.funcW2 },
     multimeter: { mode: s.meterMode, reading: 'live' },
     code_context: codeCtx,
+    schematic_context: s.schematic ? formatNetlistForPrompt(s.schematic) : null,
     demo_scenario: s.demoScenario,
     mode: s.hardwareFrame?.mode ?? 'mock',
   };
@@ -312,6 +315,38 @@ export default function DebugOverlay() {
   const lastMsg = visibleMessages[visibleMessages.length - 1];
   const isAnalyzing = isStreaming && (!lastMsg || (lastMsg.role === 'assistant' && lastMsg.content === ''));
 
+  const hasAssistantResponse = visibleMessages.some(m => m.role === 'assistant' && m.content.trim());
+
+  const exportReport = () => {
+    const state = useAppStore.getState();
+    const ch1 = state.hardwareFrame?.oscilloscope.ch1;
+    const ch2 = state.hardwareFrame?.oscilloscope.ch2;
+    const fmtHz = (hz: number) => hz >= 1000 ? `${(hz / 1000).toFixed(2)} kHz` : `${hz.toFixed(1)} Hz`;
+    const fmtV = (v: number) => `${v.toFixed(3)}V`;
+    const protocolLines = state.packets.slice(-20).map(p => {
+      if (p.protocol === 'I2C') return `[${p.timestamp}] I2C ${p.direction} addr=${p.address} reg=${p.register}${p.decoded ? ` → ${p.decoded}` : ''}`;
+      if (p.protocol === 'SPI') return `[${p.timestamp}] SPI ${p.direction}${p.decoded ? ` → ${p.decoded}` : ''}`;
+      return `[${p.timestamp}] UART ${p.direction}${p.decoded ? ` "${p.decoded}"` : ''}`;
+    });
+    const aiResponse = state.messages.filter(m => m.role === 'assistant' && !m.hidden).map(m => m.content).join('\n\n');
+    const report = buildMarkdownReport({
+      timestamp: new Date(),
+      scenario: state.demoScenario,
+      mode: state.hardwareFrame?.mode ?? 'mock',
+      signal: {
+        ch1: ch1 ? { frequency: fmtHz(ch1.frequency), vpp: `${ch1.vpp.toFixed(2)}V`, vmin: fmtV(ch1.vmin), vmax: fmtV(ch1.vmax) } : undefined,
+        ch2: ch2 ? { frequency: fmtHz(ch2.frequency), vpp: `${ch2.vpp.toFixed(2)}V`, vmin: fmtV(ch2.vmin), vmax: fmtV(ch2.vmax) } : undefined,
+        trigger: `${state.triggerSource} ${state.triggerEdge} · ${state.triggerLevel >= 0 ? '+' : ''}${state.triggerLevel.toFixed(2)}V · ${state.triggerMode}`,
+        acquisition: `${state.acqMode}${state.acqMode === 'AVG' ? ` ×${state.acqAvgN}` : ''}`,
+      },
+      protocolLines,
+      schematic: state.schematic,
+      aiResponse,
+    });
+    const ts = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
+    downloadMarkdown(`hwbench_${state.demoScenario}_${ts}.md`, report);
+  };
+
   return (
     <>
       {!open && (
@@ -412,13 +447,20 @@ export default function DebugOverlay() {
                 />
                 <button className={styles.sendBtn} onClick={() => send(input)} disabled={!input.trim() || isStreaming} title="Send message">↑</button>
               </div>
-              <button
-                className={styles.runDebugBtn}
-                onClick={() => { const note = input; setInput(''); runDebug(note); }}
-                disabled={isStreaming}
-              >
-                {isStreaming ? 'Analyzing…' : 'Run Debug'}
-              </button>
+              <div className={styles.actionRow}>
+                <button
+                  className={styles.runDebugBtn}
+                  onClick={() => { const note = input; setInput(''); runDebug(note); }}
+                  disabled={isStreaming}
+                >
+                  {isStreaming ? 'Analyzing…' : 'Run Debug'}
+                </button>
+                {hasAssistantResponse && (
+                  <button className={styles.exportBtn} onClick={exportReport} disabled={isStreaming} title="Export debug report as markdown">
+                    ↓ Export
+                  </button>
+                )}
+              </div>
             </div>
 
           </div>

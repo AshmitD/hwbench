@@ -11,9 +11,10 @@ export const TILE_LABELS: Record<TileId, string> = {
   measurements: 'Measurements',
   ai: 'AI debug',
   cad: 'CAD context',
+  schematic: 'Schematic',
 };
 
-const TILE_ORDER: TileId[] = ['osc', 'proto', 'measurements', 'funcgen', 'code', 'ai', 'cad'];
+const TILE_ORDER: TileId[] = ['osc', 'proto', 'measurements', 'funcgen', 'code', 'ai', 'cad', 'schematic'];
 
 export default function TilePicker() {
   const [open, setOpen] = useState(false);

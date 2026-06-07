@@ -318,8 +318,12 @@
 .sendBtn:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: #fff; }
 .sendBtn:disabled { opacity: 0.35; cursor: not-allowed; }
 
+.actionRow {
+  display: flex;
+  gap: 6px;
+}
 .runDebugBtn {
-  width: 100%;
+  flex: 1;
   height: 32px;
   border-radius: var(--radius-sm);
   background: var(--accent);
@@ -334,6 +338,24 @@
 }
 .runDebugBtn:hover:not(:disabled) { background: var(--accent-dim); }
 .runDebugBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.exportBtn {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.exportBtn:hover:not(:disabled) { background: var(--bg-secondary); color: var(--text-primary); border-color: var(--accent); }
+.exportBtn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ── Listening indicator ─────────────────────────────────────────────────── */
 .listeningIndicator {

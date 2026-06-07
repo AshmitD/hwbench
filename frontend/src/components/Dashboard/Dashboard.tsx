@@ -17,12 +17,13 @@ import OscilloscopePanel from '../Panels/OscilloscopePanel';
 import ProtocolPanel from '../Panels/ProtocolPanel';
 import FuncGenPanel from '../Panels/FuncGenPanel';
 import CodeContextPanel from '../CodeContext/CodeContextPanel';
+import SchematicPanel from '../Schematic/SchematicPanel';
 import TilePicker from './TilePicker';
 import WorkbenchTile from './WorkbenchTile';
 import GuidedHotspots from '../Demo/GuidedHotspots';
 import styles from './Dashboard.module.css';
 
-const TILE_ORDER: TileId[] = ['osc', 'proto', 'measurements', 'funcgen', 'code', 'ai', 'cad'];
+const TILE_ORDER: TileId[] = ['osc', 'proto', 'measurements', 'funcgen', 'code', 'ai', 'cad', 'schematic'];
 const WAVE_ICONS: Record<string, string> = { sine: '~', square: 'sq', triangle: 'tri', sawtooth: 'saw' };
 
 function fmtFreq(hz: number): string {
@@ -145,6 +146,7 @@ function TileBody({ tileId, expanded }: { tileId: TileId; expanded: boolean }) {
   if (expanded && tileId === 'proto') return <ProtocolPanel />;
   if (expanded && tileId === 'funcgen') return <FuncGenPanel />;
   if (expanded && tileId === 'code') return <CodeContextPanel />;
+  if (tileId === 'schematic') return <SchematicPanel expanded={expanded} />;
 
   if (tileId === 'osc') {
     return (
@@ -225,9 +227,10 @@ function TileBody({ tileId, expanded }: { tileId: TileId; expanded: boolean }) {
     );
   }
 
+  // cad tile fallback
   return (
     <div className={styles.emptyState}>
-      <Cpu size={22} />
+      <Gauge size={22} />
       <span>Robot/CAD context can sit beside the electrical session when assembly geometry matters.</span>
     </div>
   );
@@ -243,6 +246,7 @@ function tileMeta(tileId: TileId, s: ReturnType<typeof useAppStore.getState>) {
     code: { title: 'Code Context', subtitle: s.repoOwner ? `${s.repoOwner}/${s.repoName}` : 'No repo loaded', icon: <TerminalSquare size={16} /> },
     ai: { title: 'AI Debug', subtitle: 'Evidence-focused assistant', icon: <Bot size={16} />, status: <StatusPill>{s.isStreaming ? 'THINKING' : 'READY'}</StatusPill> },
     cad: { title: 'CAD Context', subtitle: 'Robot geometry', icon: <Gauge size={16} />, status: <StatusPill>OPTIONAL</StatusPill> },
+    schematic: { title: 'Schematic', subtitle: s.schematic ? `${s.schematic.nets.length} nets · ${s.schematic.componentCount} components` : 'Upload .kicad_sch', icon: <Cpu size={16} />, status: s.schematic ? <StatusPill tone="live">LOADED</StatusPill> : <StatusPill>UPLOAD</StatusPill> },
   };
   return meta[tileId];
 }
