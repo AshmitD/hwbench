@@ -15,9 +15,18 @@ interface InstrumentContext {
   multimeter?: { mode: string; reading: string };
   code_context?: string | null;
   schematic_context?: string | null;
+  debug_mode?: string;
   demo_scenario?: string;
   mode?: 'mock' | 'live';
 }
+
+const MODE_INSTRUCTIONS: Record<string, string> = {
+  schematic: 'The engineer is focused on the PCB schematic. PRIORITIZE component-level and net-level reasoning: wrong values, missing pullups, power rail faults, net connectivity issues. Treat oscilloscope readings as secondary reference.',
+  signal:    'The engineer is focused on oscilloscope waveforms. PRIORITIZE signal integrity: unexpected frequency, voltage levels, noise, ringing, overshoot, timing anomalies. Protocol traffic is a secondary cross-reference.',
+  protocol:  'The engineer is focused on protocol traffic. PRIORITIZE bus communication issues: unexpected NACK, wrong register addresses/values, timing violations, bus contention. Code context cross-references firmware intent.',
+  firmware:  'The engineer is focused on firmware code. PRIORITIZE logic issues: wrong peripheral configuration, missing initialization, incorrect state machine transitions, mismatched baud rates or I2C addresses. Protocol traffic validates actual bus behavior.',
+  full:      'The engineer is viewing all instruments. Reason holistically across PCB, signal, protocol, and firmware layers to identify the root cause.',
+};
 
 function buildSystemPrompt(ctx: InstrumentContext): string {
   const ch1 = ctx.oscilloscope?.ch1;
@@ -27,8 +36,11 @@ function buildSystemPrompt(ctx: InstrumentContext): string {
   const fg = ctx.function_generator;
   const mm = ctx.multimeter;
   const isMock = ctx.mode === 'mock';
+  const modeInstruction = MODE_INSTRUCTIONS[ctx.debug_mode ?? 'full'] ?? MODE_INSTRUCTIONS.full;
 
-  let prompt = `You are HWBench's embedded hardware debugging assistant for robotics engineers. Analyze oscilloscope data, protocol packets, function generator settings, multimeter readings, trigger config, acquisition settings, and code context.${isMock ? ' [NOTE: MOCK mode — simulated data, no physical hardware connected]' : ''}
+  let prompt = `You are HWBench's embedded hardware debugging assistant for robotics engineers.${isMock ? ' [MOCK mode — simulated data]' : ''}
+
+DEBUG FOCUS: ${modeInstruction}
 
 LIVE INSTRUMENT READINGS:
 

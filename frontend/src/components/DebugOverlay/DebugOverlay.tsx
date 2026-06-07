@@ -1,8 +1,27 @@
 import { useState, useEffect, useRef, KeyboardEvent } from 'react';
-import { useAppStore, ChatMessage, VOLT_PER_DIV, HardwareFrame, Packet } from '../../store/appStore';
+import { useAppStore, ChatMessage, VOLT_PER_DIV, HardwareFrame, Packet, TileId } from '../../store/appStore';
 import { formatNetlistForPrompt } from '../../utils/parseKicad';
 import { buildMarkdownReport, downloadMarkdown } from '../../utils/exportReport';
 import styles from './DebugOverlay.module.css';
+
+// ─── Debug mode ───────────────────────────────────────────────────────────────
+type DebugMode = 'schematic' | 'signal' | 'protocol' | 'firmware' | 'full';
+
+const DEBUG_LABELS: Record<DebugMode, string> = {
+  schematic: 'Debug Schematic',
+  signal:    'Debug Signal',
+  protocol:  'Debug Protocol',
+  firmware:  'Debug Firmware',
+  full:      'Debug All',
+};
+
+function getDebugMode(expandedTile: TileId | null): DebugMode {
+  if (expandedTile === 'schematic') return 'schematic';
+  if (expandedTile === 'osc')       return 'signal';
+  if (expandedTile === 'proto')     return 'protocol';
+  if (expandedTile === 'code')      return 'firmware';
+  return 'full';
+}
 
 // ─── Markdown renderer ────────────────────────────────────────────────────────
 function renderInline(text: string): React.ReactNode {
@@ -112,8 +131,8 @@ function computeSignalInsights(frame: HardwareFrame | null, packets: Packet[]): 
   };
 }
 
-// ─── Context builder ──────────────────────────────────────────────────────────
-function buildContext(s: ReturnType<typeof useAppStore.getState>) {
+// ─── Context builder (mode-aware) ─────────────────────────────────────────────
+function buildContext(s: ReturnType<typeof useAppStore.getState>, debugMode: DebugMode) {
   const ch1 = s.hardwareFrame?.oscilloscope.ch1;
   const ch2 = s.hardwareFrame?.oscilloscope.ch2;
   const fmtHz = (hz: number) => hz >= 1000 ? `${(hz / 1000).toFixed(2)} kHz` : `${hz.toFixed(1)} Hz`;
@@ -121,28 +140,49 @@ function buildContext(s: ReturnType<typeof useAppStore.getState>) {
   const ch1VPD = VOLT_PER_DIV[s.ch1VoltPerDivIdx];
   const ch2VPD = VOLT_PER_DIV[s.ch2VoltPerDivIdx];
 
-  const protocolLines = s.packets.slice(-20).map(p => {
+  // Protocol: full detail in protocol/full mode, brief summary otherwise
+  const protoLimit = (debugMode === 'protocol' || debugMode === 'full') ? 20 : 6;
+  const protocolLines = s.packets.slice(-protoLimit).map(p => {
     if (p.protocol === 'I2C') return `[${p.timestamp}] I2C ${p.direction} addr=${p.address} reg=${p.register} data=[${p.data.join(' ')}]${p.decoded ? ` → ${p.decoded}` : ''}`;
-    if (p.protocol === 'SPI') return `[${p.timestamp}] SPI ${p.direction} ${p.address} reg=${p.register}${p.decoded ? ` → ${p.decoded}` : ''}`;
+    if (p.protocol === 'SPI') return `[${p.timestamp}] SPI ${p.direction} ${p.address ?? ''} reg=${p.register}${p.decoded ? ` → ${p.decoded}` : ''}`;
     return `[${p.timestamp}] UART ${p.direction}${p.decoded ? ` "${p.decoded}"` : ''}`;
   });
 
+  // Code context: full in firmware mode (8k chars), brief otherwise (1.5k)
   let codeCtx: string | null = null;
-  if (s.selectedFile) codeCtx = `FILE: ${s.selectedFile.path}\n\`\`\`\n${s.selectedFile.content.slice(0, 5000)}\n\`\`\``;
-  else if (s.repoUrl) codeCtx = `REPO: ${s.repoUrl}`;
+  if (s.selectedFile) {
+    const charLimit = debugMode === 'firmware' ? 8000 : 1500;
+    codeCtx = `FILE: ${s.selectedFile.path}\n\`\`\`\n${s.selectedFile.content.slice(0, charLimit)}\n\`\`\``;
+  } else if (s.repoUrl && (debugMode === 'firmware' || debugMode === 'protocol' || debugMode === 'full')) {
+    codeCtx = `REPO: ${s.repoUrl}`;
+  }
+
+  // Schematic: full netlist in schematic/full mode; one-line summary as secondary context
+  let schematicCtx: string | null = null;
+  if (s.schematic) {
+    if (debugMode === 'schematic' || debugMode === 'full') {
+      schematicCtx = formatNetlistForPrompt(s.schematic);
+    } else {
+      schematicCtx = `${s.schematic.fileName}: ${s.schematic.nets.length} nets, ${s.schematic.componentCount} components [full netlist omitted]`;
+    }
+  }
+
+  // Oscilloscope: trigger + acquisition settings only when signal is the primary focus
+  const signalPrimary = debugMode === 'signal' || debugMode === 'full';
 
   return {
     oscilloscope: {
       ch1: ch1 ? { frequency: fmtHz(ch1.frequency), vpp: `${ch1.vpp.toFixed(2)}V`, vmin: fmtV(ch1.vmin), vmax: fmtV(ch1.vmax), coupling: s.ch1Coupling, probe: s.ch1Probe, voltPerDiv: `${ch1VPD < 1 ? ch1VPD * 1000 + 'mV' : ch1VPD + 'V'}` } : undefined,
       ch2: ch2 ? { frequency: fmtHz(ch2.frequency), vpp: `${ch2.vpp.toFixed(2)}V`, vmin: fmtV(ch2.vmin), vmax: fmtV(ch2.vmax), coupling: s.ch2Coupling, probe: s.ch2Probe, voltPerDiv: `${ch2VPD < 1 ? ch2VPD * 1000 + 'mV' : ch2VPD + 'V'}` } : undefined,
     },
-    trigger: { source: s.triggerSource, edge: s.triggerEdge, level: `${s.triggerLevel >= 0 ? '+' : ''}${s.triggerLevel.toFixed(2)}V`, mode: s.triggerMode },
-    acquisition: { mode: s.acqMode, averages: s.acqMode === 'AVG' ? s.acqAvgN : null },
+    trigger: signalPrimary ? { source: s.triggerSource, edge: s.triggerEdge, level: `${s.triggerLevel >= 0 ? '+' : ''}${s.triggerLevel.toFixed(2)}V`, mode: s.triggerMode } : undefined,
+    acquisition: signalPrimary ? { mode: s.acqMode, averages: s.acqMode === 'AVG' ? s.acqAvgN : null } : undefined,
     protocol_traffic: protocolLines,
-    function_generator: { waveform: s.funcWaveform, frequency: `${s.funcFrequency}${s.funcFreqUnit}`, amplitude: `${s.funcAmplitude}Vpp`, w1: s.funcW1, w2: s.funcW2 },
-    multimeter: { mode: s.meterMode, reading: 'live' },
+    function_generator: signalPrimary ? { waveform: s.funcWaveform, frequency: `${s.funcFrequency}${s.funcFreqUnit}`, amplitude: `${s.funcAmplitude}Vpp`, w1: s.funcW1, w2: s.funcW2 } : undefined,
+    multimeter: signalPrimary ? { mode: s.meterMode, reading: 'live' } : undefined,
     code_context: codeCtx,
-    schematic_context: s.schematic ? formatNetlistForPrompt(s.schematic) : null,
+    schematic_context: schematicCtx,
+    debug_mode: debugMode,
     demo_scenario: s.demoScenario,
     mode: s.hardwareFrame?.mode ?? 'mock',
   };
@@ -160,6 +200,9 @@ export default function DebugOverlay() {
 
   const s = useAppStore();
   const { messages, isStreaming, debugOverlayOpen: open, addMessage, appendToLastMessage, setIsStreaming, setDebugOverlayOpen, setLastDebugSummary } = s;
+
+  // Derives from expandedTile — updates live as user expands different panels
+  const debugMode = getDebugMode(s.expandedTile);
 
   const visibleMessages = messages.filter(m => !m.hidden).slice(-8);
 
@@ -204,7 +247,7 @@ export default function DebugOverlay() {
       const res = await fetch('/api/chat/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiMessages, context: buildContext(state) }),
+        body: JSON.stringify({ messages: apiMessages, context: buildContext(state, getDebugMode(state.expandedTile)) }),
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -453,7 +496,7 @@ export default function DebugOverlay() {
                   onClick={() => { const note = input; setInput(''); runDebug(note); }}
                   disabled={isStreaming}
                 >
-                  {isStreaming ? 'Analyzing…' : 'Run Debug'}
+                  {isStreaming ? 'Analyzing…' : DEBUG_LABELS[debugMode]}
                 </button>
                 {hasAssistantResponse && (
                   <button className={styles.exportBtn} onClick={exportReport} disabled={isStreaming} title="Export debug report as markdown">
