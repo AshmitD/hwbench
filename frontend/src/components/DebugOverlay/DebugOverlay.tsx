@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, KeyboardEvent } from 'react';
-import { useAppStore, ChatMessage, VOLT_PER_DIV } from '../../store/appStore';
+import { useAppStore, ChatMessage, VOLT_PER_DIV, HardwareFrame, Packet } from '../../store/appStore';
 import styles from './DebugOverlay.module.css';
 
 // ─── Markdown renderer ────────────────────────────────────────────────────────
@@ -15,7 +15,6 @@ function renderInline(text: string): React.ReactNode {
 
 function renderMarkdown(text: string): React.ReactNode {
   if (!text) return null;
-  // Split on double newlines for blocks, single newlines for list items
   const lines = text.split('\n');
   const elements: React.ReactNode[] = [];
   let listItems: string[] = [];
@@ -36,18 +35,15 @@ function renderMarkdown(text: string): React.ReactNode {
 
   for (const line of lines) {
     if (line.startsWith('```')) {
-      if (inCode) { flushCode(); inCode = false; }
-      else { flushList(); inCode = true; }
+      if (inCode) { flushCode(); inCode = false; } else { flushList(); inCode = true; }
       continue;
     }
     if (inCode) { codeLines.push(line); continue; }
-
     if (line.startsWith('### ')) { flushList(); elements.push(<h3 key={keyIdx++}>{renderInline(line.slice(4))}</h3>); continue; }
-    if (line.startsWith('## ')) { flushList(); elements.push(<h2 key={keyIdx++}>{renderInline(line.slice(3))}</h2>); continue; }
-    if (line.startsWith('# ')) { flushList(); elements.push(<h1 key={keyIdx++}>{renderInline(line.slice(2))}</h1>); continue; }
+    if (line.startsWith('## '))  { flushList(); elements.push(<h2 key={keyIdx++}>{renderInline(line.slice(3))}</h2>); continue; }
+    if (line.startsWith('# '))   { flushList(); elements.push(<h1 key={keyIdx++}>{renderInline(line.slice(2))}</h1>); continue; }
     if (line.startsWith('- ') || line.startsWith('* ')) { listItems.push(line.slice(2)); continue; }
     if (line.match(/^\d+\. /)) { listItems.push(line.replace(/^\d+\. /, '')); continue; }
-
     if (line.trim() === '') { flushList(); continue; }
     flushList();
     elements.push(<p key={keyIdx++}>{renderInline(line)}</p>);
@@ -56,7 +52,65 @@ function renderMarkdown(text: string): React.ReactNode {
   return elements;
 }
 
-// ─── Context builder (shared with AIPanel) ────────────────────────────────────
+// ─── Live signal insight computation (no API calls) ───────────────────────────
+interface SignalInsights {
+  chips: string[];
+  status: 'nominal' | 'anomaly';
+  statusText: string;
+}
+
+function computeSignalInsights(frame: HardwareFrame | null, packets: Packet[]): SignalInsights {
+  const chips: string[] = [];
+  let anomaly = false;
+
+  const ch1 = frame?.oscilloscope.ch1;
+  if (ch1) {
+    const freq = ch1.frequency >= 1000
+      ? `${(ch1.frequency / 1000).toFixed(2)}kHz`
+      : `${ch1.frequency.toFixed(0)}Hz`;
+    chips.push(`CH1 ${freq} · ${ch1.vpp.toFixed(2)}Vpp`);
+  }
+
+  const recent = packets.slice(-30);
+  const nacks = recent.filter(p => p.ack === false);
+  const faults = recent.filter(p => p.decoded?.toUpperCase().includes('FAULT'));
+  const i2cPkts = recent.filter(p => p.protocol === 'I2C');
+  const spiPkts  = recent.filter(p => p.protocol === 'SPI');
+  const uartPkts = recent.filter(p => p.protocol === 'UART');
+
+  if (nacks.length > 0) {
+    anomaly = true;
+    const addr = nacks[nacks.length - 1].address ?? '?';
+    chips.push(`I2C NACK at ${addr} ×${nacks.length}`);
+  } else if (faults.length > 0) {
+    anomaly = true;
+    chips.push((faults[0].decoded ?? 'Driver fault read').slice(0, 30));
+  } else if (i2cPkts.length > 0) {
+    const addrs = [...new Set(i2cPkts.map(p => p.address).filter(Boolean))].slice(0, 2);
+    chips.push(`I2C ${addrs.join(' ')} responding`);
+  } else if (spiPkts.length > 0) {
+    chips.push(`SPI — ${spiPkts.length} frames active`);
+  } else if (uartPkts.length > 0) {
+    const last = uartPkts[uartPkts.length - 1];
+    chips.push(`UART: ${(last.decoded ?? '…').slice(0, 24)}`);
+  }
+
+  const ch2 = frame?.oscilloscope.ch2;
+  if (ch2 && chips.length < 3) {
+    const freq = ch2.frequency >= 1000
+      ? `${(ch2.frequency / 1000).toFixed(2)}kHz`
+      : `${ch2.frequency.toFixed(0)}Hz`;
+    chips.push(`CH2 ${freq} · ${ch2.vpp.toFixed(2)}Vpp`);
+  }
+
+  return {
+    chips: chips.slice(0, 3),
+    status: anomaly ? 'anomaly' : 'nominal',
+    statusText: anomaly ? 'Anomaly detected' : 'Signals nominal',
+  };
+}
+
+// ─── Context builder ──────────────────────────────────────────────────────────
 function buildContext(s: ReturnType<typeof useAppStore.getState>) {
   const ch1 = s.hardwareFrame?.oscilloscope.ch1;
   const ch2 = s.hardwareFrame?.oscilloscope.ch2;
@@ -94,30 +148,37 @@ function buildContext(s: ReturnType<typeof useAppStore.getState>) {
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function DebugOverlay() {
   const [input, setInput] = useState('');
-  const [debugContext, setDebugContext] = useState('');
   const [isListening, setIsListening] = useState(false);
+  const [insights, setInsights] = useState<SignalInsights>({ chips: [], status: 'nominal', statusText: 'Signals nominal' });
   const autoTriggeredRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const recogRef = useRef<unknown>(null);
 
   const s = useAppStore();
-  const {
-    messages,
-    isStreaming,
-    debugOverlayOpen: open,
-    addMessage,
-    appendToLastMessage,
-    setIsStreaming,
-    setDebugOverlayOpen,
-    setLastDebugSummary,
-  } = s;
+  const { messages, isStreaming, debugOverlayOpen: open, addMessage, appendToLastMessage, setIsStreaming, setDebugOverlayOpen, setLastDebugSummary } = s;
 
   const visibleMessages = messages.filter(m => !m.hidden).slice(-8);
+
+  // Live insights — update every 1.5s, pure client-side, no API calls
+  useEffect(() => {
+    const update = () => {
+      const { hardwareFrame, packets } = useAppStore.getState();
+      setInsights(computeSignalInsights(hardwareFrame, packets));
+    };
+    update();
+    const id = setInterval(update, 1500);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // ── Analyzing context counter ───────────────────────────────────────────────
+  const { hardwareFrame, packets } = s;
+  const channelCount = hardwareFrame ? 2 : 0;
+  const packetSampleCount = Math.min(packets.length, 20);
 
   // ── Send a message ─────────────────────────────────────────────────────────
   const send = async (text: string, hidden = false) => {
@@ -133,7 +194,6 @@ export default function DebugOverlay() {
 
     try {
       const state = useAppStore.getState();
-
       const apiMessages = state.messages
         .filter(m => m.content.length > 0)
         .map(m => ({ role: m.role, content: m.content }));
@@ -176,23 +236,17 @@ export default function DebugOverlay() {
     }
   };
 
-  // ── Auto-trigger analysis when panel opens ─────────────────────────────────
-  const openPanel = () => {
-    setDebugOverlayOpen(true);
-  };
-
-  const closePanel = () => {
-    setDebugOverlayOpen(false);
-    autoTriggeredRef.current = false;
-  };
-
-  const runDebug = (extraContext = debugContext) => {
-    const trimmed = extraContext.trim();
+  // ── Run Debug ──────────────────────────────────────────────────────────────
+  const runDebug = (note = '') => {
+    const trimmed = note.trim();
     const prompt = trimmed
       ? `Analyze current bench state for the ${s.demoScenario} demo. Engineer note: ${trimmed}`
       : `Analyze current bench state for the ${s.demoScenario} demo. If there is no clear fault, say so.`;
     send(prompt, true);
   };
+
+  const openPanel = () => setDebugOverlayOpen(true);
+  const closePanel = () => { setDebugOverlayOpen(false); autoTriggeredRef.current = false; };
 
   useEffect(() => {
     if (!open || autoTriggeredRef.current) return;
@@ -201,7 +255,7 @@ export default function DebugOverlay() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // ── Voice recording ────────────────────────────────────────────────────────
+  // ── Voice recognition ──────────────────────────────────────────────────────
   const startListening = () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any;
@@ -230,28 +284,20 @@ export default function DebugOverlay() {
     setIsListening(false);
   };
 
-  // ── Global keyboard shortcuts ──────────────────────────────────────────────
   useEffect(() => {
     const onDown = (e: globalThis.KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-
       if (e.code === 'Escape' && open) { closePanel(); return; }
-
       if (e.code === 'KeyM' && !e.repeat) {
         e.preventDefault();
         if (!open) openPanel();
         startListening();
       }
     };
-
     const onUp = (e: globalThis.KeyboardEvent) => {
-      if (e.code === 'KeyM') {
-        e.preventDefault();
-        stopListening();
-      }
+      if (e.code === 'KeyM') { e.preventDefault(); stopListening(); }
     };
-
     window.addEventListener('keydown', onDown);
     window.addEventListener('keyup', onUp);
     return () => { window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp); };
@@ -262,65 +308,62 @@ export default function DebugOverlay() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input); }
   };
 
+  // Is the last visible message an assistant still loading (empty content)?
+  const lastMsg = visibleMessages[visibleMessages.length - 1];
+  const isAnalyzing = isStreaming && (!lastMsg || (lastMsg.role === 'assistant' && lastMsg.content === ''));
+
   return (
     <>
-      {/* Floating trigger button */}
       {!open && (
-        <button className={styles.floatBtn} onClick={openPanel} title="Open AI debug panel (or press M to voice-activate)">
+        <button className={styles.floatBtn} onClick={openPanel} title="Open AI debug panel (or hold M to voice-activate)">
           <span className={styles.floatBtnDot} />
           ⚡ DEBUG
         </button>
       )}
 
-      {/* Overlay + panel */}
       {open && (
         <div className={styles.overlay}>
           <div className={styles.backdrop} onClick={closePanel} />
           <div className={styles.panel}>
+
+            {/* Header */}
             <div className={styles.panelHeader}>
               <div className={styles.panelDot} />
               <span className={styles.panelTitle}>AI DEBUG</span>
+              <div className={`${styles.statusBadge} ${insights.status === 'anomaly' ? styles.statusAnomaly : styles.statusNominal}`}>
+                <span className={styles.statusDot} />
+                {insights.statusText}
+              </div>
               <button className={styles.closeBtn} onClick={closePanel} title="Close (Esc)">✕</button>
             </div>
 
-            <div className={styles.contextBox}>
-              <label className={styles.contextLabel}>What seems wrong? optional</label>
-              <textarea
-                className={styles.contextInput}
-                placeholder="Optional: what looks wrong? e.g. motor stutters after SPI write"
-                value={debugContext}
-                onChange={e => setDebugContext(e.target.value)}
-                disabled={isStreaming}
-                rows={2}
-              />
-              <div className={styles.quickChips}>
-                {['Signal looks noisy', 'I2C not responding', 'Motor not spinning', 'Unexpected voltage', 'Timing issue'].map(chip => (
-                  <button
-                    key={chip}
-                    className={styles.quickChip}
-                    onClick={() => setDebugContext(chip)}
-                    disabled={isStreaming}
-                  >
-                    {chip}
-                  </button>
-                ))}
+            {/* Live signal insights — computed client-side, no API */}
+            <div className={styles.liveSection}>
+              <span className={styles.liveSectionLabel}>LIVE SIGNALS</span>
+              <div className={styles.insightChips}>
+                {insights.chips.length > 0
+                  ? insights.chips.map((chip, i) => (
+                      <span
+                        key={i}
+                        className={`${styles.insightChip} ${insights.status === 'anomaly' && i === 1 ? styles.insightChipAnomaly : ''}`}
+                      >
+                        {chip}
+                      </span>
+                    ))
+                  : <span className={styles.insightChipMuted}>Waiting for signal data…</span>
+                }
               </div>
-              <button
-                className={styles.runDebugBtn}
-                onClick={() => runDebug()}
-                disabled={isStreaming}
-              >
-                Run Debug
-              </button>
             </div>
 
+            {/* Messages */}
             <div className={styles.messages}>
-              {visibleMessages.length === 0 && isStreaming && (
-                <div className={styles.analyzing}>
+              {isAnalyzing && (
+                <div className={styles.analyzingRow}>
                   <div className={styles.spinner} />
-                  Analyzing hardware state…
+                  Analyzing {channelCount} channels + {packetSampleCount} packets…
                 </div>
               )}
+
               {visibleMessages.map((msg, i) => {
                 const isLast = i === visibleMessages.length - 1;
                 const showCursor = isLast && msg.role === 'assistant' && isStreaming;
@@ -344,27 +387,44 @@ export default function DebugOverlay() {
                   </div>
                 );
               })}
+
+              {visibleMessages.length === 0 && !isStreaming && (
+                <div className={styles.emptyHint}>
+                  Run Debug to analyze the current bench state with AI.
+                </div>
+              )}
+
               <div ref={messagesEndRef} />
             </div>
 
-            <div className={styles.inputArea}>
-              <textarea
-                ref={inputRef}
-                className={styles.input}
-                placeholder="Optional: what looks wrong? e.g. motor stutters after SPI write"
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={handleInputKey}
+            {/* Bottom bar — input + send + run debug */}
+            <div className={styles.bottomBar}>
+              <div className={styles.inputRow}>
+                <textarea
+                  ref={inputRef}
+                  className={styles.input}
+                  placeholder="Optional note or follow-up question…"
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={handleInputKey}
+                  disabled={isStreaming}
+                  rows={1}
+                />
+                <button className={styles.sendBtn} onClick={() => send(input)} disabled={!input.trim() || isStreaming} title="Send message">↑</button>
+              </div>
+              <button
+                className={styles.runDebugBtn}
+                onClick={() => { const note = input; setInput(''); runDebug(note); }}
                 disabled={isStreaming}
-                rows={1}
-              />
-              <button className={styles.sendBtn} onClick={() => send(input)} disabled={!input.trim() || isStreaming}>↑</button>
+              >
+                {isStreaming ? 'Analyzing…' : 'Run Debug'}
+              </button>
             </div>
+
           </div>
         </div>
       )}
 
-      {/* LISTENING indicator */}
       {isListening && (
         <div className={styles.listeningIndicator}>
           <div className={styles.listeningDot} />
