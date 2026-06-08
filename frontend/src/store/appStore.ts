@@ -223,11 +223,11 @@ export const useAppStore = create<AppState>((setState) => ({
     osc: true,
     proto: true,
     funcgen: true,
-    code: true,
+    code: false,
     measurements: true,
     ai: true,
     cad: false,
-    schematic: false,
+    schematic: true,
   },
   expandedTile: null,
 
@@ -251,7 +251,7 @@ export const useAppStore = create<AppState>((setState) => ({
   localRunOpen: false,
   highlightedTile: null,
   demoScenario: 'motor',
-  showGuidedHotspots: true,
+  showGuidedHotspots: false,
 
   setHardwareFrame: (frame) => setState({ hardwareFrame: frame }),
 

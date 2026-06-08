@@ -20,10 +20,9 @@ import CodeContextPanel from '../CodeContext/CodeContextPanel';
 import SchematicPanel from '../Schematic/SchematicPanel';
 import TilePicker from './TilePicker';
 import WorkbenchTile from './WorkbenchTile';
-import GuidedHotspots from '../Demo/GuidedHotspots';
 import styles from './Dashboard.module.css';
 
-const TILE_ORDER: TileId[] = ['osc', 'proto', 'measurements', 'funcgen', 'code', 'ai', 'cad', 'schematic'];
+const TILE_ORDER: TileId[] = ['osc', 'proto', 'measurements', 'funcgen', 'schematic', 'ai', 'cad', 'code'];
 const WAVE_ICONS: Record<string, string> = { sine: '~', square: 'sq', triangle: 'tri', sawtooth: 'saw' };
 
 function fmtFreq(hz: number): string {
@@ -260,7 +259,6 @@ export default function Dashboard() {
 
   return (
     <div className={styles.workbench}>
-      <GuidedHotspots />
       <header className={styles.workbenchHeader}>
         <div>
           <h1>Signals, packets, and code in one debug loop.</h1>
