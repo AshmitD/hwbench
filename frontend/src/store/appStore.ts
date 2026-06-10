@@ -10,6 +10,19 @@ export interface ChannelData {
   period: number;
   voltPerDiv: number;
   timePerDiv: number;
+  // Extended by real scope server (absent in mock frames)
+  sample_rate?: number;
+  time_span_ms?: number;
+}
+
+export type ScopeStatus = 'connected' | 'searching' | null;
+
+export interface ScopeConfig {
+  sampleRate: number;
+  timeSpanMs: number;
+  numChannels: number;
+  ch1VoltageRange: number;
+  ch2VoltageRange: number;
 }
 
 export interface Packet {
@@ -28,7 +41,9 @@ export interface HardwareFrame {
   timestamp: number;
   mode: 'mock' | 'live';
   scenario?: DemoScenario;
-  oscilloscope: { ch1: ChannelData; ch2: ChannelData };
+  scope_status?: ScopeStatus;
+  config?: ScopeConfig;
+  oscilloscope: { ch1: ChannelData; ch2: ChannelData | null };
 }
 
 export interface TreeNode { path: string; type: 'blob' | 'tree'; size?: number; }
@@ -41,9 +56,35 @@ export interface ChatMessage {
   hidden?: boolean; // auto-triggered system prompts — not shown in chat UI
 }
 
-export type TileId = 'osc' | 'proto' | 'funcgen' | 'code' | 'measurements' | 'ai' | 'cad' | 'schematic';
+export type TileId = 'osc' | 'proto' | 'funcgen' | 'code' | 'measurements' | 'ai' | 'cad' | 'schematic' | 'la';
 export type DemoScenario = 'motor' | 'i2c_nack' | 'driver_fault' | 'noisy' | 'pid' | 'pwm';
 export type HighlightTarget = TileId | 'debug' | null;
+
+// ── Multi-device types ────────────────────────────────────────────────────────
+export interface DeviceInfo {
+  id: string;
+  kind: 'hantek6022' | 'fx2-la';
+  label: string;
+  status: 'connected' | 'searching' | 'running' | 'stopped' | 'error';
+}
+
+export interface LAChannel {
+  initial: number;         // 0 or 1 — state at frame start
+  transitions: number[];   // nanosecond offsets from frame start where value toggles
+}
+
+export interface LAFrame {
+  device: string;
+  timestamp: number;
+  la_status: 'running' | 'stopped' | 'searching';
+  config: {
+    sample_rate: number;
+    enabled_channels: number[];
+    time_span_ns: number;
+  };
+  channels: Record<string, LAChannel>;
+  overflow: boolean;
+}
 
 export const VOLT_PER_DIV = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5];
 export const TIME_PER_DIV_MS = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5]; // ms
@@ -66,6 +107,25 @@ interface AppState {
   hardwareFrame: HardwareFrame | null;
   packets: Packet[];
   connectionStatus: 'connecting' | 'connected' | 'disconnected';
+  scopeStatus: ScopeStatus;
+  scopeConfig: ScopeConfig | null;
+  // Inject by useHardwareSocket — call to send a command to scope_server.py
+  sendScopeCommand: (cmd: Record<string, unknown>) => void;
+  _setScopeSend: (fn: (cmd: Record<string, unknown>) => void) => void;
+  autosetBusy: boolean;
+  setAutosetBusy: (b: boolean) => void;
+
+  // Multi-device
+  devices: DeviceInfo[];
+  laFrame: LAFrame | null;
+  laChannelNames: Record<string, string>;
+  pendingDeviceToast: DeviceInfo | null;
+  laError: string | null;
+  setDevices: (d: DeviceInfo[]) => void;
+  setLAFrame: (f: LAFrame) => void;
+  setLAChannelName: (ch: string, name: string) => void;
+  setPendingDeviceToast: (d: DeviceInfo | null) => void;
+  setLAError: (e: string | null) => void;
 
   // Pause
   oscilloscopePaused: boolean;
@@ -146,6 +206,7 @@ interface AppState {
 
   // Actions
   setHardwareFrame: (frame: HardwareFrame) => void;
+  setScopeStatus: (s: ScopeStatus, cfg?: ScopeConfig) => void;
   addPackets: (packets: Packet[]) => void;
   clearPackets: () => void;
   setConnectionStatus: (s: 'connecting' | 'connected' | 'disconnected') => void;
@@ -180,6 +241,25 @@ export const useAppStore = create<AppState>((setState) => ({
   hardwareFrame: null,
   packets: [],
   connectionStatus: 'connecting',
+  scopeStatus: null,
+  scopeConfig: null,
+  sendScopeCommand: () => { /* set by useHardwareSocket */ },
+  _setScopeSend: (fn) => setState({
+    sendScopeCommand: fn,
+  }),
+  autosetBusy: false,
+  setAutosetBusy: (b) => setState({ autosetBusy: b }),
+
+  devices: [],
+  laFrame: null,
+  laChannelNames: {},
+  pendingDeviceToast: null,
+  laError: null,
+  setDevices: (d) => setState({ devices: d }),
+  setLAFrame: (f) => setState({ laFrame: f }),
+  setLAChannelName: (ch, name) => setState((s) => ({ laChannelNames: { ...s.laChannelNames, [ch]: name } })),
+  setPendingDeviceToast: (d) => setState({ pendingDeviceToast: d }),
+  setLAError: (e) => setState({ laError: e }),
 
   oscilloscopePaused: false,
   protocolPaused: false,
@@ -228,6 +308,7 @@ export const useAppStore = create<AppState>((setState) => ({
     ai: true,
     cad: false,
     schematic: true,
+    la: false,
   },
   expandedTile: null,
 
@@ -254,6 +335,10 @@ export const useAppStore = create<AppState>((setState) => ({
   showGuidedHotspots: false,
 
   setHardwareFrame: (frame) => setState({ hardwareFrame: frame }),
+
+  setScopeStatus: (s, cfg) => setState(cfg
+    ? { scopeStatus: s, scopeConfig: cfg }
+    : { scopeStatus: s }),
 
   addPackets: (newPkts) =>
     setState((state) => {

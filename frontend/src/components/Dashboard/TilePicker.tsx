@@ -5,6 +5,7 @@ import styles from './Dashboard.module.css';
 
 export const TILE_LABELS: Record<TileId, string> = {
   osc: 'Oscilloscope',
+  la: 'Logic Analyzer',
   proto: 'Protocol traffic',
   funcgen: 'Func gen + DMM',
   code: 'Code context',
@@ -14,7 +15,7 @@ export const TILE_LABELS: Record<TileId, string> = {
   schematic: 'Schematic',
 };
 
-const TILE_ORDER: TileId[] = ['osc', 'proto', 'measurements', 'funcgen', 'code', 'ai', 'cad', 'schematic'];
+const TILE_ORDER: TileId[] = ['osc', 'la', 'proto', 'measurements', 'funcgen', 'code', 'ai', 'cad', 'schematic'];
 
 export default function TilePicker() {
   const [open, setOpen] = useState(false);

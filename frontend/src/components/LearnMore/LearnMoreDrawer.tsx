@@ -43,10 +43,10 @@ export default function LearnMoreDrawer() {
         <section className={styles.liveBox}>
           <h3>Live-ish demo feed</h3>
           <div>
-            <span>CH1 motor/sensor signal</span><strong>{frame?.oscilloscope.ch1.frequency ? `${(frame.oscilloscope.ch1.frequency / 1000).toFixed(1)} kHz` : 'waiting'}</strong>
+            <span>CH1 motor/sensor signal</span><strong>{frame?.oscilloscope.ch1?.frequency ? `${(frame.oscilloscope.ch1.frequency / 1000).toFixed(1)} kHz` : 'waiting'}</strong>
           </div>
           <div>
-            <span>CH2 control signal</span><strong>{frame?.oscilloscope.ch2.vpp.toFixed(2) ?? '--'} Vpp</strong>
+            <span>CH2 control signal</span><strong>{frame?.oscilloscope.ch2?.vpp.toFixed(2) ?? '--'} Vpp</strong>
           </div>
           <div>
             <span>Latest packet</span><strong>{packets.at(-1)?.decoded ?? 'Listening to mock motor controller bus'}</strong>

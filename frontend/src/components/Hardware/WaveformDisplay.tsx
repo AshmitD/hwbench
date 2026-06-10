@@ -60,6 +60,8 @@ export interface WaveformProps {
   acqAvgN: number;
   // Derived ch2 override (funcGen)
   ch2Override: number[] | null;
+  // Actual time window from scope server (ms). Defaults to 5 for mock frames.
+  timeSpanMs?: number;
   // Zoom/pan callbacks
   onTimeDivChange?: (msPerDiv: number) => void;
 }
@@ -178,6 +180,7 @@ function drawCursorLines(
   ax: number | null, bx: number | null,
   ch1Samples: number[], ch1VPD: number,
   w: number, h: number,
+  timeSpanMs = 5,
 ) {
   const drawOne = (x: number, color: string, label: string) => {
     ctx.save();
@@ -210,7 +213,7 @@ function drawCursorLines(
       return ch1Samples[Math.max(0, Math.min(idx, ch1Samples.length - 1))];
     };
     const va = toV(ax), vb = toV(bx);
-    const dt = Math.abs((bx - ax) / w) * 5; // ms (5ms window)
+    const dt = Math.abs((bx - ax) / w) * timeSpanMs; // ms
     const dv = Math.abs(vb - va);
     const freq = dt > 0 ? 1 / (dt / 1000) : 0;
 
@@ -356,32 +359,85 @@ function drawFFTPanel(
   ctx.restore();
 }
 
+function fmtTime(ms: number): string {
+  if (ms === 0) return '0';
+  if (Math.abs(ms) < 1) return `${(ms * 1000).toFixed(0)}μs`;
+  return `${ms % 1 === 0 ? ms.toFixed(0) : ms.toFixed(1)}ms`;
+}
+
+function fmtVolt(v: number): string {
+  const a = Math.abs(v);
+  if (a === 0) return '0';
+  if (a < 0.001) return `${(v * 1e6).toFixed(0)}μV`;
+  if (a < 1) return `${(v * 1000).toFixed(0)}mV`;
+  return `${v % 1 === 0 ? v.toFixed(0) : v.toFixed(2)}V`;
+}
+
 function drawLabels(
   ctx: CanvasRenderingContext2D, w: number, h: number,
   ch1VPD: number, ch2VPD: number, timeDivMs: number, paused: boolean,
   ch1Enabled: boolean, ch2Enabled: boolean,
+  timeSpanMs = 5,
 ) {
   ctx.save();
-  ctx.font = '10px JetBrains Mono, monospace';
+  ctx.font = '9px JetBrains Mono, monospace';
+  const c = scopeColors();
+
+  // ── Y-axis voltage ticks (left edge) ──────────────────────────────────────
+  // Use ch1 V/div for the Y axis labels
+  const vpd = ch1VPD;
+  const rowH = h / GRID_ROWS;
+  ctx.textAlign = 'left';
+  for (let row = 0; row <= GRID_ROWS; row++) {
+    const volts = (GRID_ROWS / 2 - row) * vpd;
+    const y = row * rowH;
+    const label = fmtVolt(volts);
+    const alpha = volts === 0 ? 0.55 : 0.35;
+    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+    ctx.textBaseline = volts === 0 ? 'middle' : row === 0 ? 'top' : row === GRID_ROWS ? 'bottom' : 'middle';
+    ctx.fillText(label, 3, y);
+  }
+
+  // ── X-axis time ticks (bottom row) ────────────────────────────────────────
+  const colW = w / GRID_COLS;
+  ctx.textBaseline = 'bottom';
+  for (let col = 0; col <= GRID_COLS; col++) {
+    const ms = (col / GRID_COLS) * timeSpanMs;
+    const x = col * colW;
+    const label = fmtTime(ms);
+    const alpha = col === 0 ? 0.35 : 0.3;
+    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+    ctx.textAlign = col === 0 ? 'left' : col === GRID_COLS ? 'right' : 'center';
+    ctx.fillText(label, x, h - 2);
+  }
+
+  // ── Channel / scale badges (top-left) ─────────────────────────────────────
   ctx.textBaseline = 'top';
   if (ch1Enabled) {
-    ctx.fillStyle = CH1_COLOR; ctx.fillText('CH1', 6, 6);
-    ctx.fillStyle = 'rgba(34,211,238,0.55)'; ctx.fillText(`${ch1VPD < 1 ? ch1VPD * 1000 + 'mV' : ch1VPD + 'V'}/div`, 32, 6);
+    ctx.fillStyle = CH1_COLOR;       ctx.textAlign = 'left'; ctx.fillText('CH1', 6, 6);
+    ctx.fillStyle = 'rgba(34,211,238,0.55)';
+    ctx.fillText(`${ch1VPD < 1 ? (ch1VPD * 1000).toFixed(0) + 'mV' : ch1VPD + 'V'}/div`, 30, 6);
   }
   if (ch2Enabled) {
-    ctx.fillStyle = CH2_COLOR; ctx.fillText('CH2', 6, 20);
-    ctx.fillStyle = 'rgba(245,158,11,0.55)'; ctx.fillText(`${ch2VPD < 1 ? ch2VPD * 1000 + 'mV' : ch2VPD + 'V'}/div`, 32, 20);
+    ctx.fillStyle = CH2_COLOR;       ctx.fillText('CH2', 6, 19);
+    ctx.fillStyle = 'rgba(245,158,11,0.55)';
+    ctx.fillText(`${ch2VPD < 1 ? (ch2VPD * 1000).toFixed(0) + 'mV' : ch2VPD + 'V'}/div`, 30, 19);
   }
-  const c = scopeColors();
+
+  // ── Time/div readout (top-right) ──────────────────────────────────────────
   ctx.fillStyle = c.label;
-  ctx.textBaseline = 'bottom'; ctx.textAlign = 'right';
-  const tLabel = timeDivMs < 1 ? `${(timeDivMs * 1000).toFixed(0)}μs` : `${timeDivMs}ms`;
-  ctx.fillText(`${tLabel}/div`, w - 6, h - 4);
+  ctx.textBaseline = 'top'; ctx.textAlign = 'right';
+  const tdLabel = timeDivMs < 1
+    ? `${(timeDivMs * 1000).toFixed(0)}μs/div`
+    : `${timeDivMs}ms/div`;
+  ctx.fillText(tdLabel, w - 4, 6);
+
   if (paused) {
     ctx.fillStyle = c.frozen;
-    ctx.textAlign = 'center';
-    ctx.fillText('FROZEN', w / 2, h - 4);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText('FROZEN', w / 2, h - 14);
   }
+
   ctx.textAlign = 'left';
   ctx.restore();
 }
@@ -394,6 +450,7 @@ export default function WaveformDisplay({
   ch1Invert, ch2Invert, ch1VoltPerDiv, ch2VoltPerDiv,
   triggerLevel, triggerSource, onTriggerLevelChange,
   acqMode, acqAvgN, ch2Override, onTimeDivChange,
+  timeSpanMs = 5,
 }: WaveformProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const minimapRef = useRef<HTMLCanvasElement>(null);
@@ -421,11 +478,9 @@ export default function WaveformDisplay({
   const [cursorAx, setCursorAx] = useState<number | null>(null);
   const [cursorBx, setCursorBx] = useState<number | null>(null);
 
-  // Current effective time/div
+  // Current effective time/div — uses actual timeSpanMs from scope server
   const getTimeDivMs = () => {
-    const WINDOW_MS = 5;
-    const rawMs = WINDOW_MS / (GRID_COLS * viewZoom);
-    // Snap to nearest standard value
+    const rawMs = timeSpanMs / (GRID_COLS * viewZoom);
     const stdVals = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5];
     return stdVals.reduce((prev, cur) => Math.abs(cur - rawMs) < Math.abs(prev - rawMs) ? cur : prev);
   };
@@ -534,13 +589,13 @@ export default function WaveformDisplay({
     drawTriggerLine(ctx, triggerLevel, W, mainH, trigVPD);
 
     // Cursors
-    if (showCursors) drawCursorLines(ctx, cursorAx, cursorBx, view1, ch1VoltPerDiv, W, mainH);
+    if (showCursors) drawCursorLines(ctx, cursorAx, cursorBx, view1, ch1VoltPerDiv, W, mainH, timeSpanMs / viewZoom);
 
     // Hover cursor (paused only)
     if (paused && hoverX !== null) drawHoverReadout(ctx, hoverX, W, mainH, view1, view2, ch1VoltPerDiv, ch2VoltPerDiv);
 
     // Axis labels
-    drawLabels(ctx, W, mainH, ch1VoltPerDiv, ch2VoltPerDiv, getTimeDivMs(), paused, ch1Enabled, ch2Enabled);
+    drawLabels(ctx, W, mainH, ch1VoltPerDiv, ch2VoltPerDiv, getTimeDivMs(), paused, ch1Enabled, ch2Enabled, timeSpanMs / viewZoom);
 
     // FFT panel
     if (fftMode && view1.length) {

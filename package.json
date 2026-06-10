@@ -8,7 +8,8 @@
     "backend"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev": "concurrently --names \"scope,backend,frontend\" --prefix-colors \"cyan,yellow,green\" \"npm run dev:scope\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:scope": "python3 backend/device_manager.py",
     "dev:frontend": "npm run dev --workspace=frontend",
     "dev:backend": "npm run dev --workspace=backend",
     "build": "npm run build --workspaces",

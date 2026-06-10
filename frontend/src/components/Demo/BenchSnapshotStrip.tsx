@@ -31,8 +31,8 @@ export default function BenchSnapshotStrip() {
 
   return (
     <div className={styles.strip}>
-      <span className={styles.item}><Activity size={14} /> {ch1Label} · {fmtHz(frame?.oscilloscope.ch1.frequency)}</span>
-      <span className={styles.item}><Zap size={14} /> {ch2Label} · {fmtHz(frame?.oscilloscope.ch2.frequency)}</span>
+      <span className={styles.item}><Activity size={14} /> {ch1Label} · {fmtHz(frame?.oscilloscope.ch1?.frequency)}</span>
+      <span className={styles.item}><Zap size={14} /> {ch2Label} · {fmtHz(frame?.oscilloscope.ch2?.frequency)}</span>
       <span className={styles.item}><RadioTower size={14} /> {latest ? `${latest.protocol} ${latest.direction} ${latest.address ?? 'bus'}` : 'Listening to mock motor controller bus'}</span>
       <span className={styles.item}><Code2 size={14} /> {repoName || 'firmware context ready'}</span>
       <span className={styles.scenario}>{scenarioLabel}</span>

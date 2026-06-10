@@ -183,6 +183,7 @@ export default function HardwarePanel() {
           acqMode={acqMode}
           acqAvgN={acqAvgN}
           ch2Override={ch2Override}
+          timeSpanMs={ch1?.time_span_ms ?? 5}
         />
       </div>
 

@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Cpu,
   Gauge,
+  GitBranch,
   RadioTower,
   Ruler,
   TerminalSquare,
@@ -18,11 +19,12 @@ import ProtocolPanel from '../Panels/ProtocolPanel';
 import FuncGenPanel from '../Panels/FuncGenPanel';
 import CodeContextPanel from '../CodeContext/CodeContextPanel';
 import SchematicPanel from '../Schematic/SchematicPanel';
+import LogicAnalyzerPanel from '../Panels/LogicAnalyzerPanel';
 import TilePicker from './TilePicker';
 import WorkbenchTile from './WorkbenchTile';
 import styles from './Dashboard.module.css';
 
-const TILE_ORDER: TileId[] = ['osc', 'proto', 'measurements', 'funcgen', 'schematic', 'ai', 'cad', 'code'];
+const TILE_ORDER: TileId[] = ['osc', 'la', 'proto', 'measurements', 'funcgen', 'schematic', 'ai', 'cad', 'code'];
 const WAVE_ICONS: Record<string, string> = { sine: '~', square: 'sq', triangle: 'tri', sawtooth: 'saw' };
 
 function fmtFreq(hz: number): string {
@@ -89,7 +91,7 @@ function ScopePreview() {
       };
 
       if (ch1Enabled) drawTrace(frame?.oscilloscope.ch1.samples ?? [], '#0891b2', 3.3);
-      if (ch2Enabled) drawTrace(frame?.oscilloscope.ch2.samples ?? [], '#d97706', 5);
+      if (ch2Enabled) drawTrace(frame?.oscilloscope.ch2?.samples ?? [], '#d97706', 5);
     };
 
     draw();
@@ -146,6 +148,7 @@ function TileBody({ tileId, expanded }: { tileId: TileId; expanded: boolean }) {
   if (expanded && tileId === 'funcgen') return <FuncGenPanel />;
   if (expanded && tileId === 'code') return <CodeContextPanel />;
   if (tileId === 'schematic') return <SchematicPanel expanded={expanded} />;
+  if (tileId === 'la') return <LogicAnalyzerPanel />;
 
   if (tileId === 'osc') {
     return (
@@ -237,8 +240,11 @@ function TileBody({ tileId, expanded }: { tileId: TileId; expanded: boolean }) {
 
 function tileMeta(tileId: TileId, s: ReturnType<typeof useAppStore.getState>) {
   const live = !s.oscilloscopePaused && s.connectionStatus === 'connected';
+  const laStatus = s.laFrame?.la_status ?? 'searching';
+  const laChannels = s.laFrame?.config.enabled_channels.length ?? 8;
   const meta: Record<TileId, { title: string; subtitle: string; icon: React.ReactNode; status?: React.ReactNode }> = {
     osc: { title: 'Oscilloscope', subtitle: 'CH1 motor phase · CH2 control', icon: <Activity size={16} />, status: <StatusPill tone={live ? 'live' : 'warn'}>{live ? 'RUN' : 'HOLD'}</StatusPill> },
+    la:  { title: 'Logic Analyzer', subtitle: laStatus === 'running' ? `${laChannels}CH · FX2 · 24MHz` : 'FX2 · sigrok', icon: <GitBranch size={16} />, status: <StatusPill tone={laStatus === 'running' ? 'live' : 'neutral'}>{laStatus === 'running' ? 'RUN' : 'IDLE'}</StatusPill> },
     proto: { title: 'Protocol Traffic', subtitle: `${s.packets.length} packets buffered`, icon: <RadioTower size={16} />, status: <StatusPill tone={s.protocolPaused ? 'warn' : 'live'}>{s.protocolPaused ? 'PAUSED' : 'LIVE'}</StatusPill> },
     measurements: { title: 'Measurements', subtitle: 'Freq · Vpp · RMS · duty', icon: <Ruler size={16} /> },
     funcgen: { title: 'Func Gen + DMM', subtitle: 'Stimulus and meter', icon: <Zap size={16} /> },

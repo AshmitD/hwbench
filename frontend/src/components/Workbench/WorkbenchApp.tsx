@@ -1,4 +1,4 @@
-import { useHardwareSocket } from '../../hooks/useHardwareSocket';
+import { useDeviceSocket } from '../../hooks/useDeviceSocket';
 import { useAppStore } from '../../store/appStore';
 import Layout from '../Layout/Layout';
 import Dashboard from '../Dashboard/Dashboard';
@@ -9,10 +9,11 @@ import CodeContextPanel from '../CodeContext/CodeContextPanel';
 import DebugOverlay from '../DebugOverlay/DebugOverlay';
 import LearnMoreDrawer from '../LearnMore/LearnMoreDrawer';
 import LocalRunModal from '../LocalRun/LocalRunModal';
+import DeviceToast from '../DeviceToast/DeviceToast';
 import styles from './WorkbenchApp.module.css';
 
 export default function WorkbenchApp() {
-  useHardwareSocket();
+  useDeviceSocket();
   const activePanel = useAppStore(s => s.activePanel);
   const connectionStatus = useAppStore(s => s.connectionStatus);
 
@@ -37,6 +38,7 @@ export default function WorkbenchApp() {
       <DebugOverlay />
       <LearnMoreDrawer />
       <LocalRunModal />
+      <DeviceToast />
     </>
   );
 }

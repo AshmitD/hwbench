@@ -77,6 +77,36 @@
   color: var(--accent);
 }
 
+.scopeBadgeConnected {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: var(--radius-pill);
+  background: rgba(22,163,74,0.1);
+  color: var(--success);
+  border: 1px solid rgba(22,163,74,0.25);
+}
+
+.scopeBadgeSearching {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: var(--radius-pill);
+  background: rgba(100,116,139,0.1);
+  color: var(--text-tertiary);
+  border: 1px solid var(--border);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
 .statsBar {
   display: flex;
   align-items: center;
@@ -95,6 +125,41 @@
 .statVal { color: var(--text-primary); }
 .statSub { color: var(--text-tertiary); }
 .pausedLabel { font-size: 10px; font-family: var(--font-mono); color: var(--accent); }
+
+.featureBtnDisabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ── Autoset button ─────────────────────────────────────────────────────────── */
+.autosetBtn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 3px 11px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.12s, background 0.12s;
+}
+.autosetBtn:hover:not(:disabled) { opacity: 0.85; }
+.autosetBtn:disabled { cursor: not-allowed; }
+
+.autosetBtnBusy {
+  background: var(--accent-light);
+  color: var(--accent-dim);
+  border-color: rgba(217,119,6,0.4);
+  animation: autoPulse 0.9s ease-in-out infinite;
+}
+
+@keyframes autoPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
 
 .mathSelect {
   font-family: var(--font-mono);

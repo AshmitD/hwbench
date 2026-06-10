@@ -10,7 +10,14 @@ export interface WaveformStats {
   riseTime: number;    // ms (10%-90%)
 }
 
-export function computeStats(samples: number[], knownFreq?: number): WaveformStats {
+// timeSpanMs: the real duration the sample array covers.
+// For mock frames it's 5ms (200kHz × 1000 samples).
+// For live scope frames it comes from the server's time_span_ms field.
+export function computeStats(
+  samples: number[],
+  knownFreq?: number,
+  timeSpanMs = 5,
+): WaveformStats {
   if (!samples || samples.length === 0) {
     return { frequency: 0, period: 0, vpp: 0, vmax: 0, vmin: 0, vrms: 0, vmean: 0, dutyCycle: 50, riseTime: 0 };
   }
@@ -29,29 +36,26 @@ export function computeStats(samples: number[], knownFreq?: number): WaveformSta
   const vpp = vmax - vmin;
   const mid = (vmax + vmin) / 2;
 
-  // Frequency from zero crossings (rising)
+  // Frequency from rising zero-crossings through the midpoint
   let crossings = 0;
   for (let i = 1; i < n; i++) {
     if (samples[i - 1] < mid && samples[i] >= mid) crossings++;
   }
-  const windowMs = 5; // sample buffer is always 5ms
-  const frequency = knownFreq ?? (crossings > 0 ? (crossings / (windowMs / 1000)) : 0);
+  const frequency = knownFreq ?? (crossings > 0 ? (crossings / (timeSpanMs / 1000)) : 0);
   const period = frequency > 0 ? 1000 / frequency : 0; // ms
 
-  // Duty cycle: proportion above midpoint
   const aboveMid = samples.filter(s => s > mid).length;
   const dutyCycle = (aboveMid / n) * 100;
 
-  // Rise time: find first rising edge, measure 10%-90%
+  // Rise time: find first 10%→90% rising edge
   const lo = vmin + vpp * 0.1;
   const hi = vmin + vpp * 0.9;
   let riseTime = 0;
   for (let i = 1; i < n - 1; i++) {
     if (samples[i - 1] < lo && samples[i] >= lo) {
-      // Found 10% crossing; find 90%
       for (let j = i; j < n; j++) {
         if (samples[j] >= hi) {
-          riseTime = ((j - i) / n) * windowMs; // ms
+          riseTime = ((j - i) / n) * timeSpanMs;
           break;
         }
       }

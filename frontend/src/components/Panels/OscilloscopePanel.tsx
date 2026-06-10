@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAppStore, VOLT_PER_DIV } from '../../store/appStore';
 import { generateFuncGenSamples } from '../../utils/waveformMath';
 import WaveformDisplay from '../Hardware/WaveformDisplay';
@@ -6,6 +6,19 @@ import MeasurementsPanel from '../Hardware/MeasurementsPanel';
 import ChannelControls from '../Hardware/ChannelControls';
 import TriggerControls from '../Hardware/TriggerControls';
 import styles from './OscilloscopePanel.module.css';
+
+// Must match VOLT_PER_DIV in appStore
+const _VPDS = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5];
+
+function _bestVpdIdx(vpp: number): number {
+  if (vpp < 0.001) return 0;
+  const target = vpp / (8 * 0.75);
+  const idx = _VPDS.findIndex(v => v >= target);
+  return idx === -1 ? _VPDS.length - 1 : idx;
+}
+
+// Autoset timeout — if no autoset_done arrives in this many ms, clear busy state
+const AUTOSET_TIMEOUT_MS = 12_000;
 
 export default function OscilloscopePanel() {
   const s = useAppStore();
@@ -42,28 +55,108 @@ export default function OscilloscopePanel() {
     }
   }, [frame, s.triggerMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const Btn = ({ label, active, onClick, title }: { label: string; active?: boolean; onClick: () => void; title?: string }) => (
-    <button className={`${styles.featureBtn} ${active ? styles.featureBtnOn : ''}`} onClick={onClick} title={title}>{label}</button>
+  const autosetBusy = s.autosetBusy;
+  const autosetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Safety net: clear busy if no autoset_done arrives within AUTOSET_TIMEOUT_MS
+  useEffect(() => {
+    if (!autosetBusy) return;
+    autosetTimeoutRef.current = setTimeout(() => {
+      if (useAppStore.getState().autosetBusy) {
+        s.setAutosetBusy(false);
+      }
+    }, AUTOSET_TIMEOUT_MS);
+    return () => {
+      if (autosetTimeoutRef.current) clearTimeout(autosetTimeoutRef.current);
+    };
+  }, [autosetBusy]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const Btn = ({ label, active, onClick, title, disabled }: {
+    label: string; active?: boolean; onClick: () => void; title?: string; disabled?: boolean;
+  }) => (
+    <button
+      className={`${styles.featureBtn} ${active ? styles.featureBtnOn : ''} ${disabled ? styles.featureBtnDisabled : ''}`}
+      onClick={onClick} title={title} disabled={disabled}>
+      {label}
+    </button>
   );
+
+  // Autoset: server-side for live scope, client-side fallback for mock mode
+  const handleAutoset = () => {
+    if (autosetBusy) return;
+
+    if (frame?.mode === 'live' && s.scopeStatus === 'connected') {
+      // Full server-side autoset — scope hardware does the measurement
+      s.setAutosetBusy(true);
+      s.sendScopeCommand({ cmd: 'autoset' });
+    } else {
+      // Client-side fallback (mock mode or scope searching)
+      const ch1Samples = ch1?.samples ?? [];
+      const ch2Samples = ch2?.samples ?? [];
+      const patch: Partial<typeof s> = {};
+      if (ch1Samples.length) {
+        const vpp = Math.max(...ch1Samples) - Math.min(...ch1Samples);
+        const mid = (Math.max(...ch1Samples) + Math.min(...ch1Samples)) / 2;
+        patch.ch1VoltPerDivIdx = _bestVpdIdx(vpp);
+        patch.triggerLevel  = Math.round(mid * 1000) / 1000;
+        patch.triggerSource = 'CH1';
+        patch.triggerMode   = 'AUTO';
+        patch.triggerEdge   = 'rising';
+      }
+      if (s.ch2Enabled && ch2Samples.length) {
+        const vpp = Math.max(...ch2Samples) - Math.min(...ch2Samples);
+        patch.ch2VoltPerDivIdx = _bestVpdIdx(vpp);
+      }
+      if (Object.keys(patch).length) set(patch as Parameters<typeof set>[0]);
+    }
+  };
+
+  // SINGLE trigger re-arm: send run command and un-pause
+  const handleSingleRearm = () => {
+    s.sendScopeCommand({ cmd: 'run' });
+    set({ oscilloscopePaused: false });
+  };
 
   return (
     <div className={styles.panel}>
       {/* Toolbar */}
       <div className={styles.toolbar}>
         <div className={styles.toolbarSection}>
+          {/* Scope connection badge */}
+          {frame?.mode === 'live' && (
+            <span className={
+              s.scopeStatus === 'connected'
+                ? styles.scopeBadgeConnected
+                : styles.scopeBadgeSearching
+            }>
+              {s.scopeStatus === 'connected' ? 'SCOPE' : 'SEARCHING'}
+            </span>
+          )}
           {frame?.mode === 'mock' && <span className={styles.mockBadge}>MOCK</span>}
+          {s.triggerMode === 'SINGLE' && s.oscilloscopePaused
+            ? <button className={`${styles.runPauseBtn} ${styles.paused}`} onClick={handleSingleRearm} title="Re-arm SINGLE trigger" disabled={autosetBusy}>
+                SINGLE
+              </button>
+            : <button
+                className={`${styles.runPauseBtn} ${s.oscilloscopePaused ? styles.paused : styles.running}`}
+                onClick={s.toggleOscilloscopePause} title="Run/Pause (Space)" disabled={autosetBusy}>
+                {s.oscilloscopePaused ? 'PAUSED' : 'RUN'}
+              </button>
+          }
           <button
-            className={`${styles.runPauseBtn} ${s.oscilloscopePaused ? styles.paused : styles.running}`}
-            onClick={s.toggleOscilloscopePause} title="Run/Pause (Space)">
-            {s.oscilloscopePaused ? '⏸ PAUSED' : '▶ RUN'}
+            className={`${styles.autosetBtn} ${autosetBusy ? styles.autosetBtnBusy : ''}`}
+            onClick={handleAutoset}
+            disabled={autosetBusy}
+            title="Autoset: configure voltage range, trigger, and V/div for the current signal">
+            {autosetBusy ? 'AUTOSET…' : 'AUTO'}
           </button>
         </div>
         <div className={styles.toolbarDivider} />
         <div className={styles.toolbarSection}>
-          <Btn label="PERSIST" active={s.persistMode} onClick={() => set({ persistMode: !s.persistMode })} />
-          <Btn label="FFT"     active={s.fftMode}     onClick={() => set({ fftMode: !s.fftMode })} />
-          <Btn label="CURSORS" active={s.showCursors} onClick={() => set({ showCursors: !s.showCursors })} title="Shift+click to place" />
-          <Btn label="MATH"    active={s.showMath}    onClick={() => set({ showMath: !s.showMath })} />
+          <Btn label="PERSIST" active={s.persistMode} onClick={() => set({ persistMode: !s.persistMode })} disabled={autosetBusy} />
+          <Btn label="FFT"     active={s.fftMode}     onClick={() => set({ fftMode: !s.fftMode })} disabled={autosetBusy} />
+          <Btn label="CURSORS" active={s.showCursors} onClick={() => set({ showCursors: !s.showCursors })} title="Shift+click to place" disabled={autosetBusy} />
+          <Btn label="MATH"    active={s.showMath}    onClick={() => set({ showMath: !s.showMath })} disabled={autosetBusy} />
           {s.showMath && (
             <select className={styles.mathSelect} value={s.mathOperation}
               onChange={e => set({ mathOperation: e.target.value as typeof s.mathOperation })}>
@@ -109,6 +202,7 @@ export default function OscilloscopePanel() {
           onTriggerLevelChange={v => set({ triggerLevel: v })}
           acqMode={s.acqMode} acqAvgN={s.acqAvgN}
           ch2Override={ch2Override}
+          timeSpanMs={ch1?.time_span_ms ?? 5}
         />
       </div>
 

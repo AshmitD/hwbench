@@ -5,6 +5,23 @@ export default function TriggerControls() {
   const s = useAppStore();
   const set = s.set;
 
+  const sendTrigger = (patch: Partial<{
+    triggerSource: 'CH1' | 'CH2';
+    triggerEdge: 'rising' | 'falling';
+    triggerMode: 'AUTO' | 'NORM' | 'SINGLE';
+    triggerLevel: number;
+  }>) => {
+    set(patch as Parameters<typeof set>[0]);
+    const next = { ...s, ...patch };
+    s.sendScopeCommand({
+      cmd: 'set_trigger',
+      mode:   next.triggerMode,
+      source: next.triggerSource,
+      edge:   next.triggerEdge,
+      level:  next.triggerLevel,
+    });
+  };
+
   return (
     <div className={styles.trigRow}>
       <span className={styles.instrLabel}>TRIG</span>
@@ -13,7 +30,7 @@ export default function TriggerControls() {
         <button key={src}
           className={`${styles.segBtn} ${s.triggerSource === src ? styles.segBtnActive : ''}`}
           style={s.triggerSource === src ? { color: 'var(--accent)', borderColor: 'var(--accent)' } : undefined}
-          onClick={() => set({ triggerSource: src })}>
+          onClick={() => sendTrigger({ triggerSource: src })}>
           {src}
         </button>
       ))}
@@ -23,12 +40,12 @@ export default function TriggerControls() {
       <button
         className={`${styles.segBtn} ${s.triggerEdge === 'rising' ? styles.segBtnActive : ''}`}
         style={s.triggerEdge === 'rising' ? { color: 'var(--accent)', borderColor: 'var(--accent)' } : undefined}
-        onClick={() => set({ triggerEdge: 'rising' })}
+        onClick={() => sendTrigger({ triggerEdge: 'rising' })}
         title="Rising edge">↑</button>
       <button
         className={`${styles.segBtn} ${s.triggerEdge === 'falling' ? styles.segBtnActive : ''}`}
         style={s.triggerEdge === 'falling' ? { color: 'var(--accent)', borderColor: 'var(--accent)' } : undefined}
-        onClick={() => set({ triggerEdge: 'falling' })}
+        onClick={() => sendTrigger({ triggerEdge: 'falling' })}
         title="Falling edge">↓</button>
 
       <div className={styles.gap} />
@@ -37,7 +54,7 @@ export default function TriggerControls() {
         <button key={m}
           className={`${styles.segBtn} ${s.triggerMode === m ? styles.segBtnActive : ''}`}
           style={s.triggerMode === m ? { color: 'var(--accent)', borderColor: 'var(--accent)' } : undefined}
-          onClick={() => set({ triggerMode: m })}>
+          onClick={() => sendTrigger({ triggerMode: m })}>
           {m}
         </button>
       ))}
